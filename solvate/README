@@ -1,0 +1,25 @@
+README file for solvate
+
+Written by Gøran Brekke Svaland
+05.08.2016
+
+
+-----------------------------------------------------------------
+bash scripts for solvating .pdb or .gro molecules with SPC water.
+
+modify: 
+
+run_solvate.sh in order to point at folder with files to be
+solvated. It is possible to also create a vacuum by changing
+the final boundaries x,y,z.
+
+dependency:
+
+** gromacs 4.6.5 (or other versions with editconf and genbox)
+** VMD
+** solvate.sh
+** spce216.gro
+
+execute:
+
+>> bash run_solvate.sh
