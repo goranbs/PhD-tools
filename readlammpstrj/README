@@ -1,0 +1,20 @@
+########################################################
+#       README for eldip.py and readlammpstrj.py       #
+########################################################
+
+1) readlammpstrj.py
+	- python class for reading LAMMPS trajectories
+	- returns a dictionary at a timestep with the 
+	  entries in the trajectory
+	- access number of atoms at every time step
+	- access system boundaries at every time step
+
+2) eldip.py
+	- utilizes readlammpstrj.py
+	- computes the electric dipolemoment of atoms
+	  within the same molecule.
+	- 1D and 2D binning
+	- computes orientational order parameter Tp
+	
+	Usage:
+	>> eldip.py -h
