@@ -15,6 +15,7 @@
 	  within the same molecule.
 	- 1D and 2D binning
 	- computes orientational order parameter Tp
+	- computes angle between dipole and normal vector
 	
 	Usage:
 	>> eldip.py -h
