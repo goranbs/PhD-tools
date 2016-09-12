@@ -196,7 +196,7 @@ def get_1d_nbins(system_boundaries=None, dim='x', origin='lower', delta=1.0):
         delta = l
     
     nbins = int(l/float(delta) + 1) # number of bins
-    bins = np.zeros((nbins,5))      # array of bins; [px,py,pz,P**2,nm]
+    bins = np.zeros((nbins,6))      # array of bins; [px,py,pz,P**2,theta,nm]
     
     # center position of spatial bins from origin:
     lloc = system_boundaries[d,0] + delta
@@ -231,7 +231,7 @@ def get_2D_nbins(system_boundaries, dimX, originX, deltaX, dimY, originY, deltaY
         
     nbinsX = int(lX/float(dX) + 1)
     nbinsY = int(lY/float(dY) + 1)
-    binsXY = np.zeros((nbinsX, nbinsY, 5))
+    binsXY = np.zeros((nbinsX, nbinsY, 6))
     
     llocX = system_boundaries[X,0] + dX
     hlocX = system_boundaries[X,1] - dX
@@ -265,7 +265,7 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
     
     p = np.zeros((3,), dtype=float)   # electric dipole moment
     r = np.zeros((3,), dtype=float)   # initialize geometric center of molecule
-    pp = np.zeros((4,), dtype=float)  # electric dipole moment + theta
+    pp = np.zeros((5,), dtype=float)  # electric dipole moment + theta
     
     natoms = len(atoms)
     for i in xrange(natoms):
@@ -326,15 +326,16 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
     lp = np.linalg.norm(p)
     ln = np.linalg.norm(normal)
     costheta = pdotn/(lp*ln)
-
-    #print costheta
+    theta = np.arccos(costheta)*180/np.pi
     
-    pp[0] = p[0]
-    pp[1] = p[1]
-    pp[2] = p[2]
-    pp[3] = costheta*costheta
+    pp[0] = p[0]                    # el. dipole mom. x
+    pp[1] = p[1]                    # el. dipole mom. y
+    pp[2] = p[2]                    # el. dipole mom. z
+    pp[3] = costheta*costheta       # cos^2(t) of ang. betw. el.dip.mom. and normal vec.
+    pp[4] = theta                   # angle betw. el. dip.mom. and normal vec.
     
     return pp, r
+    
     
 def add_to_bin(p, r, bins, delta, boundaries, dim):
     """ Check if position is within given boundaries
@@ -360,11 +361,12 @@ def add_to_bin(p, r, bins, delta, boundaries, dim):
                 rd = r[d] - boundaries[d,0]
                 index = int(rd/delta)  # compute bin index of the molecule
                 #print index, rd, (lmin-lmax), lmin, lmax, r[d]
-                bins[index][0] += p[0]
-                bins[index][1] += p[1]
-                bins[index][2] += p[2]
+                bins[index][0] += p[0]  # Dx
+                bins[index][1] += p[1]  # Dy
+                bins[index][2] += p[2]  # Dz
                 bins[index][3] += p[3]  # costhetasquared
-                bins[index][4] += 1     # number of molecules in bin
+                bins[index][4] += p[4]  # theta
+                bins[index][5] += 1     # number of molecules in bin
                 
 
 def add_to_2Dbin(p, r, binsXY, deltaX, dimX, deltaY, dimY, bounds):
@@ -391,11 +393,12 @@ def add_to_2Dbin(p, r, binsXY, deltaX, dimX, deltaY, dimY, bounds):
                 iX = int(rX/deltaX)  # bin index X
                 iY = int(rY/deltaY)  # bin index Y
                 
-                binsXY[iX][iY][0] += p[0]
-                binsXY[iX][iY][1] += p[1]
-                binsXY[iX][iY][2] += p[2]
+                binsXY[iX][iY][0] += p[0]  # Dx
+                binsXY[iX][iY][1] += p[1]  # Dy
+                binsXY[iX][iY][2] += p[2]  # Dz
                 binsXY[iX][iY][3] += p[3]  # costhetasquared
-                binsXY[iX][iY][4] += 1     # number of molecules in bin
+                binsXY[iX][iY][4] += p[4]  # theta
+                binsXY[iX][iY][5] += 1     # number of molecules in bin
     
     
 
@@ -513,11 +516,13 @@ if args.dipolemoment:
             
             allpos.append(pos)             # append to bucket of bins:
             for j in xrange(nbins):
-                divisor = bins[j][4]
+                divisor = bins[j][5]       # number of molecules in bin
                 if (divisor == 0):         # if no particles in bin
-                    bins[j][3] = 1/3.0     # this assures Tp(z) = -0.5
+                    bins[j][3] = 1/3.      # this assures Tp(z) = -0.5
+                    bins[j][4] = -666      # not enough values in order to get realistic value.
                 else:
                     bins[j][3] /= divisor  # divide costheta**2 by number of molecules
+                    bins[j][4] /= divisor  # average angle of molecules in bin
                 
             allbins.append(bins)
             allnbins.append(nbins)
@@ -542,11 +547,13 @@ if args.dipolemoment:
             aposY.append(posY)
             for i in xrange(nbinsX):
                 for j in xrange(nbinsY):
-                    divisor = binsXY[i][j][4]
+                    divisor = binsXY[i][j][5]
                     if (divisor == 0):
-                        binsXY[i][j][4] = 1/3.  # assure Tp(X,Y) = -0.5
+                        binsXY[i][j][3] = 1/3.       # assure Tp(X,Y) = -0.5
+                        binsXY[i][j][4] = -666       # not enough values in order to get realistic value.
                     else:
                         binsXY[i][j][3] /= divisor   # divide costheta**2 by # molecules
+                        binsXY[i][j][4] /= divisor   # average angle of molecules in bin
         
             a2Dbins.append(binsXY)
             
@@ -558,6 +565,7 @@ if args.dipolemoment:
         py = np.zeros( (nbins, 1) )  # y-dir
         pz = np.zeros( (nbins, 1) )  # z-dir
         Tp = np.zeros( (nbins, 1) )  # orientational order parameter relative to dim
+        theta = np.zeros( (nbins, 1) )
         d = get_number_dim_from_dim(dim)
         for i in range(len(allbins)):
             abin = allbins[i]
@@ -566,17 +574,20 @@ if args.dipolemoment:
                 py[j] += abin[j][1]
                 pz[j] += abin[j][2]
                 Tp[j] += (3*abin[j][3] - 1) # ref DOI: 10.1103/PhysRevLett.101.056102
+                theta[j] += abin[j][4]
                 
         px = px/nframes
         py = py/nframes
         pz = pz/nframes
         Tp = Tp/(2*nframes)
+        theta = theta/nframes
         
         ## write to file:
         coord = 'coord_' + dim
         Tpdim = 'Tp_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
-        datafields = [coord, 'px', 'py', 'pz', Tpdim]
-        data = [allpos[0],px,py,pz,Tp]
+        thetadim = 'theta_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
+        datafields = [coord, 'px', 'py', 'pz', Tpdim, thetadim]
+        data = [allpos[0],px,py,pz,Tp,theta]
         
         if prefix == None:
             outfile = "ed_bin1d_" + dim + "_" + Tpdim + ".dat"
@@ -597,6 +608,7 @@ if args.dipolemoment:
         py = np.zeros( (nx,ny, 1) )
         pz = np.zeros( (nx,ny, 1) )
         Tp = np.zeros( (nx,ny, 1) )
+        theta = np.zeros( (nx,ny, 1) )
         dx = get_number_dim_from_dim(dimX)
         dy = get_number_dim_from_dim(dimY)
         for t in xrange(nframes):
@@ -605,25 +617,30 @@ if args.dipolemoment:
             for i in xrange(nx):
                 for j in xrange(ny):
                     #print t,i,j
-                    aa = abin[i][j][0]
-                    bb = abin[i][j][1]
-                    cc = abin[i][j][2]
-                    dd = abin[i][j][3]
+                    aa = abin[i][j][0]         # Dx
+                    bb = abin[i][j][1]         # Dy
+                    cc = abin[i][j][2]         # Dz
+                    dd = abin[i][j][3]         # cos(theta)
+                    ee = abin[i][j][4]         # theta
                     px[i][j] += aa
                     py[i][j] += bb
                     pz[i][j] += cc
-                    Tp[i][j] += dd
+                    Tp[i][j] += (3*dd - 1)     # ref DOI: 10.1103/PhysRevLett.101.056102
+                    theta[i][j] += ee
                     
         px = px/nframes
         py = py/nframes
         pz = pz/nframes
         Tp = Tp/(2*nframes)
+        theta = theta/nframes
+        
         
         # wrap 2d arrays into 1d arrays:
         ppx = np.zeros( (nx*ny,1) )
         ppy = np.zeros( (nx*ny,1) )
         ppz = np.zeros( (nx*ny,1) )
         Tpp = np.zeros( (nx*ny,1) )
+        thetap = np.zeros( (nx*ny,1) )
         pX = np.zeros( (nx*ny,1) )
         pY = np.zeros( (nx*ny,1) )
         
@@ -634,6 +651,7 @@ if args.dipolemoment:
                 ppy[kk] = float(py[i][j])
                 ppz[kk] = float(pz[i][j])
                 Tpp[kk] = float(Tp[i][j])
+                thetap[kk] = float(theta[i][j])
                 pX[kk] = float(aposX[0][i])
                 pY[kk] = float(aposY[0][j])
                 kk += 1
@@ -643,8 +661,9 @@ if args.dipolemoment:
         coordX = 'coord_' + dimX
         coordY = 'coord_y' + dimY
         Tpdim = 'Tp_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
-        datafields = [coordX, coordY, 'px', 'py', 'pz', Tpdim]
-        data = [pX,pY,ppx,ppy,ppz,Tpp]
+        thetadim = 'theta_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
+        datafields = [coordX, coordY, 'px', 'py', 'pz', Tpdim, thetadim]
+        data = [pX,pY,ppx,ppy,ppz,Tpp,thetap]
         
         if prefix == None:
             outfile = "ed_bin2d_" + dimX + dimY + "_" + Tpdim + ".dat"
