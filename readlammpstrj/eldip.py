@@ -10,10 +10,10 @@ eldip.py
 
 -------------------------------------
 
-compute electric dipolemoment of molecules across a molecular system
-1D binning
-2D binning
-compute orientational order parameter Tp = 1/2 <3u**2 -1>, Tp E [-0.5,1.0]
+Compute electric dipolemoment of molecules across a molecular system
+- 1D binning
+- 2D binning
+compute orientational order parameter Tp = 1/2 <3cos(theta)**2 -1>, Tp E [-0.5,1.0]
 Tp is computed the orientational order parameter relative to a vector n, 
 provided through the commandline. 
 Tp = -0.5 : electric dipole moment otrhogonal to n
@@ -196,7 +196,7 @@ def get_1d_nbins(system_boundaries=None, dim='x', origin='lower', delta=1.0):
         delta = l
     
     nbins = int(l/float(delta) + 1) # number of bins
-    bins = np.zeros((nbins,6))      # array of bins; [px,py,pz,P**2,theta,nm]
+    bins = np.zeros((nbins,7))      # array of bins; [px,py,pz,P**2,theta,nm,phi]
     
     # center position of spatial bins from origin:
     lloc = system_boundaries[d,0] + delta
@@ -256,6 +256,7 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
         1) computes geometrical center of molecule
         2) computes electric dipole moment of molecule (collection of atoms
         3) computes cos(theta) = (p dot n )/ (p dot p)
+        4) If molecule compose of 3 atoms; compute H-O-H angle (hardcoded for water)
     """
     dX = (system_boundaries[0][1] - system_boundaries[0][0])/2.
     dY = (system_boundaries[1][1] - system_boundaries[1][0])/2.
@@ -265,7 +266,7 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
     
     p = np.zeros((3,), dtype=float)   # electric dipole moment
     r = np.zeros((3,), dtype=float)   # initialize geometric center of molecule
-    pp = np.zeros((5,), dtype=float)  # electric dipole moment + theta
+    pp = np.zeros((6,), dtype=float)  # electric dipole moment + theta + phi
     
     natoms = len(atoms)
     for i in xrange(natoms):
@@ -305,10 +306,17 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
             molecule[i][4] = molecule[i-1][4] - dz
                  
     it = 0
+    rp = np.zeros((3,natoms), dtype=float)
     for atom in molecule:
-        r[0] += atom[2]
-        r[1] += atom[3]
-        r[2] += atom[4]
+        x = atom[2]
+        y = atom[3]
+        z = atom[4]
+        rp[it][0] = x
+        rp[it][1] = y
+        rp[it][2] = z
+        r[0] += x
+        r[1] += y
+        r[2] += z
         it += 1
                 
     r = r/natoms                     # geometrical center of molecule
@@ -333,6 +341,34 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
     pp[2] = p[2]                    # el. dipole mom. z
     pp[3] = costheta*costheta       # cos^2(t) of ang. betw. el.dip.mom. and normal vec.
     pp[4] = theta                   # angle betw. el. dip.mom. and normal vec.
+
+    if (natoms == 3):
+        # locate the oxygen atom from its charge:
+        if (atoms[0][1]<0):
+            iO = 0
+            iH1 = 1
+            iH2 = 2
+        if (atoms[1][1]<0):
+            iO = 1
+            iH1 = 0
+            iH2 = 2
+        else:
+            iO = 2
+            iH1 = 1
+            iH2 = 0
+        
+        rOH1 = rp[iH1] - rp[iO]
+        rOH2 = rp[iH2] - rp[iO]
+        
+        OH1dotOH2 = np.dot(rOH1,rOH2)
+        ROH1 = np.linalg.norm(rOH1)
+        ROH2 = np.linalg.norm(rOH2)
+        cosphi = OH1dotOH2/(ROH1*ROH2)
+        phi = np.arccos(cosphi)*180/np.pi
+    else:
+        phi = 666
+    
+    pp[5] = phi  # H-O-H angle of water molecule
     
     return pp, r
     
@@ -367,6 +403,7 @@ def add_to_bin(p, r, bins, delta, boundaries, dim):
                 bins[index][3] += p[3]  # costhetasquared
                 bins[index][4] += p[4]  # theta
                 bins[index][5] += 1     # number of molecules in bin
+                bins[index][6] += p[5]  # phi
                 
 
 def add_to_2Dbin(p, r, binsXY, deltaX, dimX, deltaY, dimY, bounds):
@@ -433,15 +470,17 @@ def write_to_file(output, data, datafields):
     
 
 if args.dipolemoment:
-    """ Compute dipole moment of molecules in system.
+    """ Compute dipole moment D, of molecules in system.
+        Compute orientational order parameter; Tp = 1/2 < 3cos^2(theta) - 1>
+        Compute angle theta; |D||n|cos(theta) = D dot n
+        
+        Restrictions:
         1) Molecule ID (mol) and atom ID's (id) must be present in lammpstrj file
         2) Positions of atoms must be present in lammpstrj file (x,y,z)
         3) Atom types (type) must be present in lammpstrj file
-        4) At least 2 atom types must have been given in the command line options (-t)
-        5) The atom types must belong to a molecule ID (mol)
-        
-        No mass correction, method only valid for molecules with total charge 0.
-        
+        4) The given atom types must belong to a molecule ID (mol)
+        5) Geometrical center of molecules is used in stead of center of mass.
+            Method is therefore approximate for molecules with charge =! 0.
     """
         
     obj = trj(args.inputfile[0]) # create LAMMPStrj object 
@@ -489,8 +528,9 @@ if args.dipolemoment:
                     x = data[X][atom]
                     y = data[Y][atom]
                     z = data[Z][atom]
+                    t = data[TYPE][atom]
                     
-                    molecules[mol].append((id_,q,x,y,z))
+                    molecules[mol].append((id_,q,x,y,z,t))
                     
                 else:
                     id_ = data[ID][atom]
@@ -498,8 +538,9 @@ if args.dipolemoment:
                     x = data[X][atom]
                     y = data[Y][atom]
                     z = data[Z][atom]
+                    t = data[TYPE][atom]
                     
-                    molecules.update({mol:[(id_,q,x,y,z)]})
+                    molecules.update({mol:[(id_,q,x,y,z,t)]})
         
         ##-- 1D binning
         if (args.bin1d is not None):
@@ -522,7 +563,8 @@ if args.dipolemoment:
                     bins[j][4] = -666      # not enough values in order to get realistic value.
                 else:
                     bins[j][3] /= divisor  # divide costheta**2 by number of molecules
-                    bins[j][4] /= divisor  # average angle of molecules in bin
+                    bins[j][4] /= divisor  # average angle theta of molecules in bin
+                    bins[j][6] /= divisor  # average angle phi
                 
             allbins.append(bins)
             allnbins.append(nbins)
@@ -561,11 +603,12 @@ if args.dipolemoment:
         # averaging bin1d bins:
     
         nbins = allnbins[0]
-        px = np.zeros( (nbins, 1) )  # electric dipolemoment x-dir
-        py = np.zeros( (nbins, 1) )  # y-dir
-        pz = np.zeros( (nbins, 1) )  # z-dir
-        Tp = np.zeros( (nbins, 1) )  # orientational order parameter relative to dim
-        theta = np.zeros( (nbins, 1) )
+        px = np.zeros( (nbins, 1) )    # electric dipolemoment x-dir
+        py = np.zeros( (nbins, 1) )    # y-dir
+        pz = np.zeros( (nbins, 1) )    # z-dir
+        Tp = np.zeros( (nbins, 1) )    # orientational order parameter relative to dim
+        theta = np.zeros( (nbins, 1) ) # theta
+        phi = np.zeros( (nbins, 1) )   # phi
         d = get_number_dim_from_dim(dim)
         for i in range(len(allbins)):
             abin = allbins[i]
@@ -575,19 +618,21 @@ if args.dipolemoment:
                 pz[j] += abin[j][2]
                 Tp[j] += (3*abin[j][3] - 1) # ref DOI: 10.1103/PhysRevLett.101.056102
                 theta[j] += abin[j][4]
+                phi[j] += abin[j][6]
                 
         px = px/nframes
         py = py/nframes
         pz = pz/nframes
         Tp = Tp/(2*nframes)
         theta = theta/nframes
+        phi = phi/nframes
         
         ## write to file:
         coord = 'coord_' + dim
         Tpdim = 'Tp_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
         thetadim = 'theta_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
-        datafields = [coord, 'px', 'py', 'pz', Tpdim, thetadim]
-        data = [allpos[0],px,py,pz,Tp,theta]
+        datafields = [coord, 'px', 'py', 'pz', Tpdim, thetadim,'phi']
+        data = [allpos[0],px,py,pz,Tp,theta,phi]
         
         if prefix == None:
             outfile = "ed_bin1d_" + dim + "_" + Tpdim + ".dat"
