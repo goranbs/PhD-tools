@@ -12,10 +12,22 @@
 2) eldip.py
 	- utilizes readlammpstrj.py
 	- computes the electric dipolemoment of atoms
-	  within the same molecule.
+	  within the same molecule (only for three atoms at a time)
 	- 1D and 2D binning
 	- computes orientational order parameter Tp
-	- computes angle between dipole and normal vector
+	- computes angle between dipole and provided normal vector
+	- computes total dipolemoment of system given atom types
+	- computes total forces on atoms given types
 	
 	Usage:
-	>> eldip.py -h
+	>> eldip -h
+	>> eldip -i file.lammpstrj -t [1,2,3] -x 10 20 -d -s -f -p --dump1d z lower 0.1
+	
+	Install:
+	- requires Python 2.7
+	- requires readlammpstrj.py
+	- requires python numpy
+	- requires python argparse
+	- requires python sys
+	install through terminal:
+	>> sudo ln -s ~/path/to/eldip.py /usr/local/bin/eldip
