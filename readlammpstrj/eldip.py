@@ -134,7 +134,17 @@ print "   skip N frames          : ", args.skipframes
 print " # ---------------------------------------------------------- #"
 
 #########################################################
-    
+
+def minimum_image(r,lo,hi):
+    """
+    minimum image convention
+    """
+    dR = (hi - lo)
+    if (r < lo):
+        r = r + dR
+    if (r > hi):
+        r = r - dR
+    return r
 
 def get_system_boundaries(lmp_obj=None):
     
@@ -759,10 +769,12 @@ if args.totaldipolemoment:
                     x = data[X][atom]
                     y = data[Y][atom]
                     z = data[Z][atom]
+                    x = minimum_image(x,system_boundaries[0,0], system_boundaries[0,1])
+                    y = minimum_image(x,system_boundaries[1,0], system_boundaries[1,1])
+                    x = minimum_image(x,system_boundaries[2,0], system_boundaries[2,1])
                     if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
                          ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
                          ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
-                             # in stead of this test, mimimum image convention is needed!
     
                              j += 1
                              q = data[Q][atom]
@@ -831,20 +843,24 @@ if args.force:
             j = 0
             for atom in range(natoms):
                 t = data[TYPE][atom]
-                if (t not in types):
-                    print "Hello!"
                 if (t in types):
-                    # mimimum image convention is needed here!
-                    j += 1
-    
-                    fx = data[FX][atom]
-                    fy = data[FY][atom]
-                    fz = data[FZ][atom]
-                    #print "\n ", fx,fy,fz
-                        
-                    F_tot[0] += fx
-                    F_tot[1] += fy
-                    F_tot[2] += fz
+                    x = data[X][atom]
+                    y = data[Y][atom]
+                    z = data[Z][atom]
+                    x = minimum_image(x,system_boundaries[0,0], system_boundaries[0,1])
+                    y = minimum_image(x,system_boundaries[1,0], system_boundaries[1,1])
+                    x = minimum_image(x,system_boundaries[2,0], system_boundaries[2,1])
+                    if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
+                         ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
+                         ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
+                             
+                             j += 1
+                             fx = data[FX][atom]
+                             fy = data[FY][atom]
+                             fz = data[FZ][atom]
+                             F_tot[0] += fx
+                             F_tot[1] += fy
+                             F_tot[2] += fz
         #print j
         
     F_tot = np.array(F_tot)/(nframes-skipframes)
