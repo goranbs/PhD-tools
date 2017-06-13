@@ -762,6 +762,7 @@ if args.totaldipolemoment:
                     if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
                          ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
                          ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
+                             # in stead of this test, mimimum image convention is needed!
     
                              j += 1
                              q = data[Q][atom]
@@ -823,32 +824,27 @@ if args.force:
     for i in range(nframes):
         data = obj.get_data()
         if (i >= skipframes):
-            printframe(i+1,nframes)
+            #printframe(i+1,nframes)
             natoms = obj.natoms[-1]
             system_boundaries, ud_boundaries = get_system_boundaries(obj)
             ## ----------------------------------------------------- ##    
             j = 0
             for atom in range(natoms):
                 t = data[TYPE][atom]
+                if (t not in types):
+                    print "Hello!"
                 if (t in types):
-                    x = data[X][atom]
-                    y = data[Y][atom]
-                    z = data[Z][atom]
-                    if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
-                         ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
-                         ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
+                    # mimimum image convention is needed here!
+                    j += 1
     
-                        j += 1
-    
-                        fx = data[FX][atom]
-                        fy = data[FY][atom]
-                        fz = data[FZ][atom]
-                        #print "\n ", fx,fy,fz
+                    fx = data[FX][atom]
+                    fy = data[FY][atom]
+                    fz = data[FZ][atom]
+                    #print "\n ", fx,fy,fz
                         
-                        F_tot[0] += fx
-                        F_tot[1] += fy
-                        F_tot[2] += fz
-                        #print data[FZ][atom]
+                    F_tot[0] += fx
+                    F_tot[1] += fy
+                    F_tot[2] += fz
         #print j
         
     F_tot = np.array(F_tot)/(nframes-skipframes)
