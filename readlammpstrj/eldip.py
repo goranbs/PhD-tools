@@ -6,6 +6,8 @@ Created on Mon Jul  4 16:29:25 2016
 @author: goranbs
 --------------------------------------
 
+Based on:
+
 eldip.py
 
 -------------------------------------
@@ -24,21 +26,47 @@ display help:
 
 -------------------------------------
 
+neweldip: Add functionality to dump all dipole moments in each bin
+? How should this information be written to file?
+- In chunks?
+- One file for every chunk?
+    - Makes it easy to display with gnuplot
+    - Could be many files...
+
+-------------------------------------
+
 eldip.py reads a LAMMPS trajectory using the class: readlammpsdata.py
 - charge (q), coordinates (x,y,z), atom id (id) and molecule id (mol) must 
   be given in the LAMMPS trajectory.
 
 """
 
+# --------------------------------------------------------------------------- #
+# global variables:
+
+eA = 0.20819434   # conversion factor from eAngstrom to Debye
+nN = 0.06952      # conversion factor from kcal/mol/angstrom to nanoNewtons
+MPa = 6952        # conversion factor from kcal/mol/angstrom^3 to MPa
+# --------------------------------------------------------------------------- #
+
 import numpy as np                         # numpy library
 from readlammpstrj import LAMMPStrj as trj # read lmp trj
 import argparse                            # handle command line arguments
+import sys
 
-wa_parser = argparse.ArgumentParser(description='Compute average xyz behaviour from LAMMPS trajectory')
-wa_parser.add_argument('-d','--dipolemoment', action='store_true', 
-                    help='Method: Compute dipole moment of molecules (same molID) defined by group of types given in -t')
+wa_parser = argparse.ArgumentParser(description='Compute stuff from LAMMPS trajectory')
+wa_parser.add_argument('-i', '--inputfile', metavar=('filename'), type=str, nargs=1,
+                       help='Required! LAMMPS trajectory file containing atom information: id mol type q x y z')
 wa_parser.add_argument('-t','--types', metavar='[1,2,...]', type=str, nargs=1,
-                       help='list of types in lammpstrj file. White spaces = error!')
+                       help='Required! list of types e.g. [1,2,4] in lammpstrj file. White spaces = error!')
+wa_parser.add_argument('-d','--dipolemoments', action='store_true', 
+                    help='Method: Compute dipole moment of molecules (same molID) defined by group of types given in -t.')
+wa_parser.add_argument('-s','--totaldipolemoment', action='store_true', 
+                    help='Method: Compute total electric dipole moment of system given -t. Optional: -x, -y and -z.')
+wa_parser.add_argument('-f','--force', action='store_true', 
+                    help='Method: Compute total force on particles given -t. Optional: -x, -y and -z.')
+wa_parser.add_argument('-p', '--dump1d', action='store_true',
+                       help='Dump one file for each bin containing dipole moments of all molecules. Cartesian and spherical coordinates.')
 wa_parser.add_argument('-n', '--normal', metavar=('x','y','z'), type=float, nargs=3,
                        help='tuple: x y z. Default: 0 0 1')
 wa_parser.add_argument('-x', '--xrange', metavar=('xmin','xmax'), type=float, nargs=2,
@@ -47,16 +75,24 @@ wa_parser.add_argument('-y', '--yrange', metavar=('ymin','ymax'), type=float, na
                        help='box boundary y-direction, ymin > ylo, ymax < yhi')
 wa_parser.add_argument('-z', '--zrange', metavar=('zmin','zmax'), type=float, nargs=2,
                        help='box boundary z-direction, zmin > zlo, zmax < zhi')
-wa_parser.add_argument('-i', '--inputfile', metavar=('filename'), type=str, nargs=1,
-                       help='LAMMPS trajectory file containing atom information: id mol type q x y z')
 wa_parser.add_argument('-o', '--outputprefix', metavar=('filename'), type=str, nargs=1,
                        help='output file name(s) prefix')     
 wa_parser.add_argument('--bin1d', metavar=('dim', 'origin', 'delta'), type=str, nargs=3,
                        help='1D binning. Default: z lower 1. dim=x,y,z origin=lower,upper delta=thickness of spatial bins.')
-wa_parser.add_argument('--bin2d', metavar=('dim', 'origin', 'delta', 'dim', 'origin', 'delta'), type=str, nargs=6,
-                       help='2D binning. Default: y lower 1 z lower 1. dim=x,y,z origin=lower,upper delta=thickness of spatial bins.')
 
 args = wa_parser.parse_args()
+# -------------------------------------------------------
+
+#########################################################
+
+if not (args.dipolemoments or args.totaldipolemoment or args.force):
+    wa_parser.error("No action reqested! Provide -dipolemoments or -totaldipolemoment or -force")
+    
+if not (args.inputfile):
+    wa_parser.error("No Input file provided! Provide input file through -inputfile")
+    
+if not (args.types):
+    wa_parser.error("No atom types provided! Provide types through -types")
 
 types = args.types[0].replace(']', '')
 types = types.replace('[', '')
@@ -75,21 +111,21 @@ if args.normal is None:
 if args.normal is not None:
     normal = (float(args.normal[0]), float(args.normal[1]), float(args.normal[2]))
 
-print "compute dipole moment: ", args.dipolemoment
-print "xrange               : ", args.xrange
-print "yrange               : ", args.yrange
-print "zrange               : ", args.zrange
-print "normal               : ", normal
-print "types                : ", types
-print "input file name      : ", args.inputfile
-print "output prefix        : ", prefix
+print " # ---------------------------------------------------------- #"
+print " #                      -- DATA INPUT --                      #"
+print " # ---------------------------------------------------------- #"
+print "   compute dipole moments : ", args.dipolemoments
+print "   compute total dipole   : ", args.totaldipolemoment
+print "   compute force          : ", args.force
+print "   xrange                 : ", args.xrange
+print "   yrange                 : ", args.yrange
+print "   zrange                 : ", args.zrange
+print "   normal                 : ", normal
+print "   types                  : ", types
+print "   input file name        : ", args.inputfile
+print "   output prefix          : ", prefix
+print " # ---------------------------------------------------------- #"
 
-# -------------------------------------------------------
-
-#########################################################
-#
-# Computes
-#
 #########################################################
     
 
@@ -196,7 +232,9 @@ def get_1d_nbins(system_boundaries=None, dim='x', origin='lower', delta=1.0):
         delta = l
     
     nbins = int(l/float(delta) + 1) # number of bins
-    bins = np.zeros((nbins,7))      # array of bins; [px,py,pz,P**2,theta,nm,phi]
+    bins = np.zeros((nbins,10))      # array of bins; [px,py,pz,P**2,theta,nm,phi]
+    baskets = np.empty((nbins,),dtype=object)
+    for i in xrange(nbins): baskets[i] = []  # fill with empty lists
     
     # center position of spatial bins from origin:
     lloc = system_boundaries[d,0] + delta
@@ -206,49 +244,7 @@ def get_1d_nbins(system_boundaries=None, dim='x', origin='lower', delta=1.0):
     else:
         pos = np.linspace(lloc, hloc, nbins) # Default: origin = 'lower'
         
-    return pos, bins, nbins
-    
-    
-def get_2D_nbins(system_boundaries, dimX, originX, deltaX, dimY, originY, deltaY):
-    """ --bin2d dim origin delta dim origin delta
-        dim = x,y,x
-        origin = lower or upper
-        delta = thickness of spatial bins
-    """
-    X = get_number_dim_from_dim(dimX)
-    Y = get_number_dim_from_dim(dimY)
-    lX = system_boundaries[X,1] - system_boundaries[X][0]
-    lY = system_boundaries[Y,1] - system_boundaries[Y][0]
-    dX = float(deltaX)
-    dY = float(deltaY)
-
-    if (dX > lX):
-        print "Warning! Given first delta > system size! Resetting deltaX = ", lX
-        dX = lX
-    if (dY > lY):
-        print "Warning! Given second delta > system size! Resetting deltaY = ", lY
-        dY = lY
-        
-    nbinsX = int(lX/float(dX) + 1)
-    nbinsY = int(lY/float(dY) + 1)
-    binsXY = np.zeros((nbinsX, nbinsY, 6))
-    
-    llocX = system_boundaries[X,0] + dX
-    hlocX = system_boundaries[X,1] - dX
-    llocY = system_boundaries[Y,0] + dY
-    hlocY = system_boundaries[Y,1] - dY
-    
-    if (originX == 'upper'):
-        posX = np.linspace(hlocX,llocX,nbinsX) # upper
-    else:
-        posX = np.linspace(llocX,hlocX,nbinsX) # default "lower"
-        
-    if (originY == 'upper'):
-        posY = np.linspace(hlocY,llocY,nbinsY) # upper
-    else:
-        posY = np.linspace(llocY,hlocY,nbinsY) # default "lower"
-    
-    return posX, posY, binsXY, nbinsX, nbinsY
+    return pos, bins, nbins, baskets
     
 
 def compute_dipolemoment(atoms,normal,system_boundaries):
@@ -266,7 +262,7 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
     
     p = np.zeros((3,), dtype=float)   # electric dipole moment
     r = np.zeros((3,), dtype=float)   # initialize geometric center of molecule
-    pp = np.zeros((6,), dtype=float)  # electric dipole moment + theta + phi
+    pp = np.zeros((9,), dtype=float)  # Dx Dy Dz Tp Tpx Tpy Tpz theta phi
     
     natoms = len(atoms)
     for i in xrange(natoms):
@@ -311,6 +307,7 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
         x = atom[2]
         y = atom[3]
         z = atom[4]
+        #print np.size(rp), np.shape(rp)
         rp[it][0] = x
         rp[it][1] = y
         rp[it][2] = z
@@ -319,16 +316,13 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
         r[2] += z
         it += 1
                 
-    r = r/natoms                     # geometrical center of molecule
+    r = r/natoms                     # geometric center of molecule
     
     for atom in molecule:
         q = atom[1]                  # charge of atom
         p[0] += q*(atom[2] - r[0])   # p = q_i*(r_i - r_c)
         p[1] += q*(atom[3] - r[1])
         p[2] += q*(atom[4] - r[2])
-        #p[0] += q*(atom[2])          # p = q_i*(r_i - r_c)
-        #p[1] += q*(atom[3])
-        #p[2] += q*(atom[4])
         
     pdotn = np.dot(p,normal)
     lp = np.linalg.norm(p)
@@ -336,14 +330,25 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
     costheta = pdotn/(lp*ln)
     theta = np.arccos(costheta)*180/np.pi
     
+    pdotx = np.dot(p,(1,0,0))       # x 
+    pdoty = np.dot(p,(0,1,0))       # y
+    pdotz = np.dot(p,(0,0,1))       # z
+    costhetax = pdotx/lp            # cos(theta) relative to x-component
+    costhetay = pdoty/lp            # cos(theta) relative to y-component
+    costhetaz = pdotz/lp            # cos(theta) relative to z-component
+    
     pp[0] = p[0]                    # el. dipole mom. x
     pp[1] = p[1]                    # el. dipole mom. y
     pp[2] = p[2]                    # el. dipole mom. z
     pp[3] = costheta*costheta       # cos^2(t) of ang. betw. el.dip.mom. and normal vec.
-    pp[4] = theta                   # angle betw. el. dip.mom. and normal vec.
+    pp[4] = costhetax*costhetax     # -//- relative to x vector
+    pp[5] = costhetay*costhetay     # -//- relative to y vector
+    pp[6] = costhetaz*costhetaz     # -//- relative to z vector
+    pp[7] = theta                   # angle betw. el. dip.mom. and normal (n) vec.
 
+    # Only for computing Phi
     if (natoms == 3):
-        # locate the oxygen atom from its charge:
+        # Find oxygen atom from its charge:
         if (atoms[0][1]<0):
             iO = 0
             iH1 = 1
@@ -368,16 +373,15 @@ def compute_dipolemoment(atoms,normal,system_boundaries):
     else:
         phi = 666
     
-    pp[5] = phi  # H-O-H angle of water molecule
+    pp[8] = phi  # H-O-H angle of water molecule
     
     return pp, r
     
     
-def add_to_bin(p, r, bins, delta, boundaries, dim):
+def add_to_bin(p, r, bins, delta, boundaries, dim, baskets):
     """ Check if position is within given boundaries
         add dipolemoment to correct bin in bins
     """
-
     # 1) check if r is within boundaries
     # 2) compute what bin to put it in
 
@@ -400,44 +404,15 @@ def add_to_bin(p, r, bins, delta, boundaries, dim):
                 bins[index][0] += p[0]  # Dx
                 bins[index][1] += p[1]  # Dy
                 bins[index][2] += p[2]  # Dz
-                bins[index][3] += p[3]  # costhetasquared
-                bins[index][4] += p[4]  # theta
-                bins[index][5] += 1     # number of molecules in bin
-                bins[index][6] += p[5]  # phi
-                
+                bins[index][3] += p[3]  # costhetasquared (relatice to n)
+                bins[index][4] += p[4]  # costhetasquared (relatice to x (100))
+                bins[index][5] += p[5]  # costhetasquared (relatice to y (010))
+                bins[index][6] += p[6]  # costhetasquared (relatice to z (001))
+                bins[index][7] += p[7]  # theta
+                bins[index][8] += p[8]  # phi
+                bins[index][9] += 1     # number of molecules in bin
+                baskets[index].append((p[0],p[1],p[2]))
 
-def add_to_2Dbin(p, r, binsXY, deltaX, dimX, deltaY, dimY, bounds):
-    """ Check if position of molecule is within given boundaries
-        add dipole moment to correct 2D bin.
-    """
-    
-    dX = get_number_dim_from_dim(dimX)
-    dY = get_number_dim_from_dim(dimY)
-
-    xmin = bounds[0,0]
-    xmax = bounds[0,1]
-    ymin = bounds[1,0]
-    ymax = bounds[1,1]
-    zmin = bounds[2,0]
-    zmax = bounds[2,1]
-
-    if (xmin < r[0] and r[0] < xmax ):
-        if (ymin < r[1] and r[1] < ymax ):
-            if (zmin < r[2] and r[2] < zmax ):
-                # within the limits, so we'll include the molecule
-                rX = r[dX] - bounds[dX,0]
-                rY = r[dY] - bounds[dY,0]
-                iX = int(rX/deltaX)  # bin index X
-                iY = int(rY/deltaY)  # bin index Y
-                
-                binsXY[iX][iY][0] += p[0]  # Dx
-                binsXY[iX][iY][1] += p[1]  # Dy
-                binsXY[iX][iY][2] += p[2]  # Dz
-                binsXY[iX][iY][3] += p[3]  # costhetasquared
-                binsXY[iX][iY][4] += p[4]  # theta
-                binsXY[iX][iY][5] += 1     # number of molecules in bin
-    
-    
 
 def write_to_file(output, data, datafields):
     """ Write output file 
@@ -446,7 +421,8 @@ def write_to_file(output, data, datafields):
     """
     if (len(data) != len(datafields)):
         print "Error! number of data fields != number of headers!"
-        print len(data), len(datafields)
+        print 'len:   ', len(data), len(datafields)
+        print 'shape: ', np.shape(data), np.shape(datafields)
 
     ofile = open(output,'w')
     header = "chunk "
@@ -457,19 +433,35 @@ def write_to_file(output, data, datafields):
     ofile.write(header)
     
     it = 0
-    for i in range(len(data[0])):
+    for i in xrange(len(data[0])):
         line = str(it) + " "
         it += 1
-        for j in range(len(data)):
+        for j in xrange(len(data)):
             line += str(float(data[j][i])) + " "
         line += "\n"
         ofile.write(line)
             
     ofile.close()
     print "Finished writing file: ", output
-    
 
-if args.dipolemoment:
+    
+def printframe(frame,endframe):
+    """
+    Print time frame to terminal.
+    """
+    line = "\r    timeframe: {:d} / {:d}".format(frame, nframes)
+    #print(line),
+    sys.stdout.write(line)
+    sys.stdout.flush()
+    
+def printline():
+    print " # ---------------------------------------------------------- #"
+    
+def printEndOfMethod(method):
+    print " # -- END OF METHOD {:^38s} -- #".format(method)        
+
+
+if args.dipolemoments:
     """ Compute dipole moment D, of molecules in system.
         Compute orientational order parameter; Tp = 1/2 < 3cos^2(theta) - 1>
         Compute angle theta; |D||n|cos(theta) = D dot n
@@ -484,6 +476,7 @@ if args.dipolemoment:
     """
         
     obj = trj(args.inputfile[0]) # create LAMMPStrj object 
+    nframes = obj.nframes        # number of time frames in trajectory    
     ## ----------------------------------------------------- ##
     ID='id'                      # atom id
     MOL='mol'                    # molecule id
@@ -497,20 +490,21 @@ if args.dipolemoment:
     Zs='zs'                      # scaled atom position z # not supported
     ## ----------------------------------------------------- ##    
     
-    nframes = obj.nframes        # number of time frames in trajectory    
-
     allpos = []                  # bin1d bins
     allbins = []
     allnbins = []
     allnatoms = []
+    allbaskets = []
     
     aposX = []                   # bin2d bins
     aposY = []
-    a2Dbins = [] 
+    a2Dbins = []
+    D = [0,0,0]
     
+    print "\n   Computing...\n"
     for i in range(nframes):
-        print "## ------ TIMEFRAME ", i, "/", nframes, "------ ##"
         
+        printframe(i+1,nframes)
         data = obj.get_data()
         natoms = obj.natoms[-1]
         system_boundaries, ud_boundaries = get_system_boundaries(obj)
@@ -541,199 +535,309 @@ if args.dipolemoment:
                     t = data[TYPE][atom]
                     
                     molecules.update({mol:[(id_,q,x,y,z,t)]})
+                    
+        if (args.bin1d is None):
+            """
+            Compute only the total dipole moment of all molecules"
+            """
+            for molecule in molecules:
+                p,r = compute_dipolemoment(molecules[molecule], normal, system_boundaries)
+                D[0] += p[0]
+                D[1] += p[1]
+                D[2] += p[2]
         
         ##-- 1D binning
         if (args.bin1d is not None):
             dim = args.bin1d[0]            # dimention to perform binning
             origin = args.bin1d[1]         # origin of bins (lower, upper)
             delta = float(args.bin1d[2])   # bin spacing
-            pos, bins, nbins = get_1d_nbins(ud_boundaries,dim,origin,delta)
+            pos, bins, nbins, baskets = get_1d_nbins(ud_boundaries,dim,origin,delta)
             
             for molecule in molecules:
                 # compute electric dipole moment of molecules and add to 1D bin
                 p,r = compute_dipolemoment(molecules[molecule], normal, system_boundaries)
-                
-                add_to_bin(p, r, bins, delta, ud_boundaries, dim)
+                D[0] += p[0]
+                D[1] += p[1]
+                D[2] += p[2]
+                add_to_bin(p, r, bins, delta, ud_boundaries, dim, baskets)
             
             allpos.append(pos)             # append to bucket of bins:
             for j in xrange(nbins):
-                divisor = bins[j][5]       # number of molecules in bin
+                divisor = bins[j][9]       # number of molecules in bin: N
                 if (divisor == 0):         # if no particles in bin
                     bins[j][3] = 1/3.      # this assures Tp(z) = -0.5
-                    bins[j][4] = -666      # not enough values in order to get realistic value.
+                    bins[j][4] = 1/3.      # this assures Tp(z) = -0.5
+                    bins[j][5] = 1/3.      # this assures Tp(z) = -0.5
+                    bins[j][6] = 1/3.      # this assures Tp(z) = -0.5
+                    bins[j][8] = 90        # phi if no samples
                 else:
                     bins[j][3] /= divisor  # divide costheta**2 by number of molecules
                     bins[j][4] /= divisor  # average angle theta of molecules in bin
-                    bins[j][6] /= divisor  # average angle phi
+                    bins[j][5] /= divisor  # average angle theta of molecules in bin
+                    bins[j][6] /= divisor  # average angle theta of molecules in bin
+                    bins[j][7] /= divisor  # average theta
+                    bins[j][8] /= divisor  # average phi
                 
             allbins.append(bins)
             allnbins.append(nbins)
+            allbaskets.append(baskets)
         
-        ##-- 2D binning
-        if (args.bin2d is not None):
-            dimX = args.bin2d[0]           # first dimension: X
-            originX = args.bin2d[1]        # origin
-            deltaX = float(args.bin2d[2])  # delta
-            dimY = args.bin2d[3]           # second dimension: Y
-            originY = args.bin2d[4]        # origin
-            deltaY = float(args.bin2d[5])  # delta
-        
-            posX, posY, binsXY, nbinsX, nbinsY = get_2D_nbins(ud_boundaries, dimX, originX, deltaX, dimY, originY, deltaY)
-        
-            for molecule in molecules:
-                # compute electric dipole moment, and add to 2D bin
-                p,r = compute_dipolemoment(molecules[molecule], normal, system_boundaries)             
-                add_to_2Dbin(p, r, binsXY, deltaX, dimX, deltaY, dimY, ud_boundaries)
-             
-            aposX.append(posX)
-            aposY.append(posY)
-            for i in xrange(nbinsX):
-                for j in xrange(nbinsY):
-                    divisor = binsXY[i][j][5]
-                    if (divisor == 0):
-                        binsXY[i][j][3] = 1/3.       # assure Tp(X,Y) = -0.5
-                        binsXY[i][j][4] = -666       # not enough values in order to get realistic value.
-                    else:
-                        binsXY[i][j][3] /= divisor   # divide costheta**2 by # molecules
-                        binsXY[i][j][4] /= divisor   # average angle of molecules in bin
-        
-            a2Dbins.append(binsXY)
+    if (args.bin1d is None):
+        """
+        Print only the total dipole moment of all molecules.
+        """
+        D = np.array(D)/nframes
+        print "\n \n   Done...\n   Assuming units real..."
+        printline()
+        print "   Total dipole moment of all molecules: "
+        printline()
+        print "   D =", D, "eA"
+        print "   D =", D*eA, "Debye"
+        print "  |D|=", np.linalg.norm(D*eA), "Debye"
+        printline()
+
             
     if (args.bin1d is not None):        
         # averaging bin1d bins:
     
+    
         nbins = allnbins[0]
-        px = np.zeros( (nbins, 1) )    # electric dipolemoment x-dir
-        py = np.zeros( (nbins, 1) )    # y-dir
-        pz = np.zeros( (nbins, 1) )    # z-dir
-        Tp = np.zeros( (nbins, 1) )    # orientational order parameter relative to dim
-        theta = np.zeros( (nbins, 1) ) # theta
-        phi = np.zeros( (nbins, 1) )   # phi
-        d = get_number_dim_from_dim(dim)
-        for i in range(len(allbins)):
+        px = np.zeros( (nbins, 1) )     # electric dipolemoment x-dir
+        py = np.zeros( (nbins, 1) )     # y-dir
+        pz = np.zeros( (nbins, 1) )     # z-dir
+        Tp = np.zeros( (nbins, 1) )     # orientational order parameter relative to input; dim
+        Tpx = np.zeros( (nbins, 1) )    # orientational order parameter relative to (100)
+        Tpy = np.zeros( (nbins, 1) )    # orientational order parameter relative to (010)
+        Tpz = np.zeros( (nbins, 1) )    # orientational order parameter relative to (001)
+        theta = np.zeros( (nbins, 1) )  # theta
+        phi = np.zeros( (nbins, 1) )    # phi
+        Nmolecs = np.zeros( (nbins,1) ) # Average number of molecules in bin
+        d = get_number_dim_from_dim(dim)# dim
+        
+        baskets = np.empty((nbins,),dtype=object)
+        for i in xrange(nbins): baskets[i] = []  # fill with empty lists
+        
+        for i in xrange(len(allbins)):
             abin = allbins[i]
-            for j in range(len(abin)):
+            baskets += allbaskets[i]
+            for j in xrange(len(abin)):
                 px[j] += abin[j][0]
                 py[j] += abin[j][1]
                 pz[j] += abin[j][2]
                 Tp[j] += (3*abin[j][3] - 1) # ref DOI: 10.1103/PhysRevLett.101.056102
-                theta[j] += abin[j][4]
-                phi[j] += abin[j][6]
-                
+                Tpx[j] += (3*abin[j][4] - 1) # ref DOI: 10.1103/PhysRevLett.101.056102
+                Tpy[j] += (3*abin[j][5] - 1) # ref DOI: 10.1103/PhysRevLett.101.056102
+                Tpz[j] += (3*abin[j][6] - 1) # ref DOI: 10.1103/PhysRevLett.101.056102
+                theta[j] += abin[j][7]
+                phi[j] += abin[j][8]
+                Nmolecs[j] += abin[j][9]
+           
+        
         px = px/nframes
         py = py/nframes
         pz = pz/nframes
         Tp = Tp/(2*nframes)
+        Tpx = Tpx/(2*nframes)
+        Tpy = Tpy/(2*nframes)
+        Tpz = Tpz/(2*nframes)
         theta = theta/nframes
         phi = phi/nframes
+        nmol = Nmolecs/nframes
         
         ## write to file:
         coord = 'coord_' + dim
         Tpdim = 'Tp_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
         thetadim = 'theta_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
-        datafields = [coord, 'px', 'py', 'pz', Tpdim, thetadim,'phi']
-        data = [allpos[0],px,py,pz,Tp,theta,phi]
+        
+        datafields = [coord, 'px', 'py', 'pz', 'Tpx', 'Tpy', 'Tpz', Tpdim, thetadim, 'phi', 'Nmolecules']
+        data = [allpos[0],px,py,pz,Tpx,Tpy,Tpz,Tp,theta,phi,nmol]
         
         if prefix == None:
-            outfile = "ed_bin1d_" + dim + "_" + Tpdim + ".dat"
+            outfile = "ed_bin1d.dat"
         else:
-            outfile = prefix[0] + "_ed_bin1d_" + dim + "_" + Tpdim + ".dat"
+            outfile = prefix[0] + "_ed_bin1d.dat"
             
         write_to_file(outfile, data, datafields)
-        #-- End of bin1d compute ----------------------------------------------
+        print "\n    File written: {:s}".format(outfile)
         
-    if (args.bin2d is not None):
-        # compute average of 2D bins:
-        
-        shape = np.shape(a2Dbins)
-        nt = shape[0]
-        nx = shape[1]
-        ny = shape[2]
-        px = np.zeros( (nx,ny, 1) )
-        py = np.zeros( (nx,ny, 1) )
-        pz = np.zeros( (nx,ny, 1) )
-        Tp = np.zeros( (nx,ny, 1) )
-        theta = np.zeros( (nx,ny, 1) )
-        dx = get_number_dim_from_dim(dimX)
-        dy = get_number_dim_from_dim(dimY)
-        for t in xrange(nframes):
-            abin = a2Dbins[t]
-            print "Averaging: ", t, " shape of 2D bins: ", np.shape(abin)
-            for i in xrange(nx):
-                for j in xrange(ny):
-                    #print t,i,j
-                    aa = abin[i][j][0]         # Dx
-                    bb = abin[i][j][1]         # Dy
-                    cc = abin[i][j][2]         # Dz
-                    dd = abin[i][j][3]         # cos(theta)
-                    ee = abin[i][j][4]         # theta
-                    px[i][j] += aa
-                    py[i][j] += bb
-                    pz[i][j] += cc
-                    Tp[i][j] += (3*dd - 1)     # ref DOI: 10.1103/PhysRevLett.101.056102
-                    theta[i][j] += ee
-                    
-        px = px/nframes
-        py = py/nframes
-        pz = pz/nframes
-        Tp = Tp/(2*nframes)
-        theta = theta/nframes
-        
-        
-        # wrap 2d arrays into 1d arrays:
-        ppx = np.zeros( (nx*ny,1) )
-        ppy = np.zeros( (nx*ny,1) )
-        ppz = np.zeros( (nx*ny,1) )
-        Tpp = np.zeros( (nx*ny,1) )
-        thetap = np.zeros( (nx*ny,1) )
-        pX = np.zeros( (nx*ny,1) )
-        pY = np.zeros( (nx*ny,1) )
-        
-        kk = 0
-        for i in xrange(nx):
-            for j in xrange(ny):
-                ppx[kk] = float(px[i][j])
-                ppy[kk] = float(py[i][j])
-                ppz[kk] = float(pz[i][j])
-                Tpp[kk] = float(Tp[i][j])
-                thetap[kk] = float(theta[i][j])
-                pX[kk] = float(aposX[0][i])
-                pY[kk] = float(aposY[0][j])
-                kk += 1
+        if (args.dump1d):
+            # dump electric dipole moments. One file for each bin...   
+            print "   Writing dump1d files..."
+            IT=0
+            for basket in baskets:
+                IT+=1
+                outf = 'dump1d_{:04d}.dat'.format(IT)
+                data = ['px','py','pz']
                 
-        ##-- write to file:
-        
-        coordX = 'coord_' + dimX
-        coordY = 'coord_y' + dimY
-        Tpdim = 'Tp_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
-        thetadim = 'theta_' + str(int(normal[0])) + str(int(normal[1])) + str(int(normal[2]))
-        datafields = [coordX, coordY, 'px', 'py', 'pz', Tpdim, thetadim]
-        data = [pX,pY,ppx,ppy,ppz,Tpp,thetap]
-        
-        if prefix == None:
-            outfile = "ed_bin2d_" + dimX + dimY + "_" + Tpdim + ".dat"
-        else:
-            outfile = prefix[0] + "_ed_bin2d_" + dimX + dimY + "_" + Tpdim + ".dat"
-            
-        write_to_file(outfile, data, datafields)
-        #-- End of bin2d compute ----------------------------------------------
+                ofile = open(outf,'w')
+                header = '#id px py pz phi theta r\n'
+                ofile.write(header)    
+                #print np.shape(basket), len(basket)
+                it=0
+                for px, py, pz in basket:
+                    it+=1
+                    r = np.sqrt(px**2 + py**2 + px**2)      # radius
+                    if (px == 0):
+                        th = 1.5707963267948966             # lim(atan(x)) x -> inf
+                    else:
+                        th = np.arctan(py/px)               # polar (theta)
+                    
+                    try:
+                        pzor = pz/r
+                    except:
+                        print 'r = {}'.format(r)
+                        pzor = pz
+                        
+                    if (pzor < -1):
+                        az = np.pi                          # acos(-1) = pi
+                    if (pzor > 1):
+                        az = np.pi                          # acos(1) = pi
+                    else:
+                        az = np.arccos(pz/r)                # azimuthal (phi)
+                    
+                    ofile.write("{} {} {} {} {} {} {}\n".format(it, px, py, pz, az, th, r))
 
+            
+        #-- End of bin1d compute ----------------------------------------------        
+    printEndOfMethod("dipolemoments")
+    obj.close_trj()
+    ##-- End of method
+                
+
+if args.force:
+    """ 
+    Compute total forces on set of particles given:
+    -t = particle types
+    -x = bounds in x-direction of the system
+    -y = bounds in y-direction of the system
+    -z = bounds in z-direction of the system    
+    """
         
+    obj = trj(args.inputfile[0]) # create LAMMPStrj object 
+    nframes = obj.nframes        # number of time frames in trajectory    
+    ## ----------------------------------------------------- ##
+    ID='id'                      # atom id
+    MOL='mol'                    # molecule id
+    TYPE='type'                  # atom type
+    Q='q'                        # charge
+    X='x'                        # unscaled atom position x
+    Y='y'                        # unscaled atom position y
+    Z='z'                        # unscaled atom position z
+    FX='fx'                      # force component x
+    FY='fy'                      # force component y
+    FZ='fz'                      # force component z
+    ## ----------------------------------------------------- ##    
+    
+    F_tot = [0,0,0]              # total force on group
+
+    print "\n   Computing...\n"
+    for i in range(nframes):
+        #print "## ------ TIMEFRAME ", (i+1), "/", nframes, "------ ##"
+        printframe(i+1,nframes)
+        data = obj.get_data()
+        natoms = obj.natoms[-1]
+        system_boundaries, ud_boundaries = get_system_boundaries(obj)
+        ## ----------------------------------------------------- ##    
+        j = 0
+        for atom in range(natoms):
+            t = data[TYPE][atom]
+            if (t in types):
+                x = data[X][atom]
+                y = data[Y][atom]
+                z = data[Z][atom]
+                if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
+                     ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
+                     ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
+
+                    j += 1
+
+                    fx = data[FX][atom]
+                    fy = data[FY][atom]
+                    fz = data[FZ][atom]
+                    #print "\n ", fx,fy,fz
+                    
+                    F_tot[0] += fx
+                    F_tot[1] += fy
+                    F_tot[2] += fz
+                    #print data[FZ][atom]
+        #print j
         
+    F_tot = np.array(F_tot)/nframes
+    print "\n \n   Done...\n   Assuming units real..."    
+    printline()
+    print "   Force =", F_tot, " kcal/mol/angstrom"
+    print "   Force =", F_tot*nN, " nN"
+    printline()
+    printEndOfMethod("force")
+    printline()
     obj.close_trj()
     ##-- End of method
 
-                
         
+if args.totaldipolemoment:
+    """
+    Compute the total electric dipole moment of a system defined by:
+    -t = particle types
+    -x = bounds in x-direction of the system
+    -y = bounds in y-direction of the system
+    -z = bounds in z-direction of the system
+    The total electric dipole moment is computed as:
+    D = sum(q_i * r_i)
+    """
 
-                
-            
-            
-        
-        
-        
-        
-        
+    obj = trj(args.inputfile[0]) # create LAMMPStrj object 
+    nframes = obj.nframes        # number of time frames in trajectory
+    ## ----------------------------------------------------- ##
+    ID='id'                      # atom id
+    MOL='mol'                    # molecule id
+    TYPE='type'                  # atom type
+    Q='q'                        # charge
+    X='x'                        # unscaled atom position x
+    Y='y'                        # unscaled atom position y
+    Z='z'                        # unscaled atom position z
+    ## ----------------------------------------------------- ##    
+
+    print "\n   Computing...\n"
+    for i in range(nframes):
+        #print "## ------ TIMEFRAME ", (i+1), "/", nframes, "------ ##"
+        printframe(i+1,nframes)
+        data = obj.get_data()
+        natoms = obj.natoms[-1]
+        system_boundaries, ud_boundaries = get_system_boundaries(obj)
+        ## ----------------------------------------------------- ##    
+        j = 0
+        D = [0,0,0]
+        for atom in range(natoms):
+            t = data[TYPE][atom]
+            if (t in types):
+                x = data[X][atom]
+                y = data[Y][atom]
+                z = data[Z][atom]
+                if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
+                     ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
+                     ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
+
+                         j += 1
+                         q = data[Q][atom]
+                         x = data[X][atom]
+                         y = data[Y][atom]
+                         z = data[Z][atom]
+                     
+                         D[0] += q*x
+                         D[1] += q*y
+                         D[2] += q*z
+    
+    D = np.array(D)/nframes
+    print "\n \n   Done...\n   Assuming units real..."
+    printline()
+    print "   D =", D, " eA"
+    print "   D =", D*eA, " Debye"
+    print "  |D|=", np.linalg.norm(D*eA), "Debye"
+    printline()
+    printEndOfMethod("totaldipolemoment")
+    printline()
+    obj.close_trj()
+    ##-- End of method        
         
 
 
