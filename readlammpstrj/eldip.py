@@ -38,6 +38,10 @@ neweldip: Add functionality to dump all dipole moments in each bin
 eldip.py reads a LAMMPS trajectory using the class: readlammpsdata.py
 - charge (q), coordinates (x,y,z), atom id (id) and molecule id (mol) must 
   be given in the LAMMPS trajectory.
+  
+-------------------------------------
+
+TODO: Unneccacary to read the trajectory for each method?
 
 """
 
@@ -79,6 +83,8 @@ wa_parser.add_argument('-o', '--outputprefix', metavar=('filename'), type=str, n
                        help='output file name(s) prefix')     
 wa_parser.add_argument('--bin1d', metavar=('dim', 'origin', 'delta'), type=str, nargs=3,
                        help='1D binning. Default: z lower 1. dim=x,y,z origin=lower,upper delta=thickness of spatial bins.')
+wa_parser.add_argument('--skipframes', metavar=('N'), type=int, nargs=1,
+                       help='Skip the first skipNframes of the input trajectory. Default: skipNframes = 0')
 
 args = wa_parser.parse_args()
 # -------------------------------------------------------
@@ -109,7 +115,7 @@ if args.zrange is None:
 if args.normal is None:
     normal = (0.0, 0.0, 1.0)
 if args.normal is not None:
-    normal = (float(args.normal[0]), float(args.normal[1]), float(args.normal[2]))
+    normal = (float(args.normal[0]), float(args.normal[1]), float(args.normal[2]))    
 
 print " # ---------------------------------------------------------- #"
 print " #                      -- DATA INPUT --                      #"
@@ -124,6 +130,7 @@ print "   normal                 : ", normal
 print "   types                  : ", types
 print "   input file name        : ", args.inputfile
 print "   output prefix          : ", prefix
+print "   skip N frames          : ", args.skipframes
 print " # ---------------------------------------------------------- #"
 
 #########################################################
@@ -702,78 +709,8 @@ if args.dipolemoments:
     printEndOfMethod("dipolemoments")
     obj.close_trj()
     ##-- End of method
-                
 
-if args.force:
-    """ 
-    Compute total forces on set of particles given:
-    -t = particle types
-    -x = bounds in x-direction of the system
-    -y = bounds in y-direction of the system
-    -z = bounds in z-direction of the system    
-    """
-        
-    obj = trj(args.inputfile[0]) # create LAMMPStrj object 
-    nframes = obj.nframes        # number of time frames in trajectory    
-    ## ----------------------------------------------------- ##
-    ID='id'                      # atom id
-    MOL='mol'                    # molecule id
-    TYPE='type'                  # atom type
-    Q='q'                        # charge
-    X='x'                        # unscaled atom position x
-    Y='y'                        # unscaled atom position y
-    Z='z'                        # unscaled atom position z
-    FX='fx'                      # force component x
-    FY='fy'                      # force component y
-    FZ='fz'                      # force component z
-    ## ----------------------------------------------------- ##    
-    
-    F_tot = [0,0,0]              # total force on group
 
-    print "\n   Computing...\n"
-    for i in range(nframes):
-        #print "## ------ TIMEFRAME ", (i+1), "/", nframes, "------ ##"
-        printframe(i+1,nframes)
-        data = obj.get_data()
-        natoms = obj.natoms[-1]
-        system_boundaries, ud_boundaries = get_system_boundaries(obj)
-        ## ----------------------------------------------------- ##    
-        j = 0
-        for atom in range(natoms):
-            t = data[TYPE][atom]
-            if (t in types):
-                x = data[X][atom]
-                y = data[Y][atom]
-                z = data[Z][atom]
-                if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
-                     ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
-                     ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
-
-                    j += 1
-
-                    fx = data[FX][atom]
-                    fy = data[FY][atom]
-                    fz = data[FZ][atom]
-                    #print "\n ", fx,fy,fz
-                    
-                    F_tot[0] += fx
-                    F_tot[1] += fy
-                    F_tot[2] += fz
-                    #print data[FZ][atom]
-        #print j
-        
-    F_tot = np.array(F_tot)/nframes
-    print "\n \n   Done...\n   Assuming units real..."    
-    printline()
-    print "   Force =", F_tot, " kcal/mol/angstrom"
-    print "   Force =", F_tot*nN, " nN"
-    printline()
-    printEndOfMethod("force")
-    printline()
-    obj.close_trj()
-    ##-- End of method
-
-        
 if args.totaldipolemoment:
     """
     Compute the total electric dipole moment of a system defined by:
@@ -797,37 +734,46 @@ if args.totaldipolemoment:
     Z='z'                        # unscaled atom position z
     ## ----------------------------------------------------- ##    
 
+    if args.skipframes is None:
+        skipframes = 0
+    else:
+        skipframes = args.skipframes[0]
+
+    if (nframes <= skipframes):
+        wa_parser.error("--skipframes N < nframes")
+
+    D = [0,0,0]   # Total dipole moment; D = (x,y,z)
+
     print "\n   Computing...\n"
     for i in range(nframes):
-        #print "## ------ TIMEFRAME ", (i+1), "/", nframes, "------ ##"
-        printframe(i+1,nframes)
         data = obj.get_data()
-        natoms = obj.natoms[-1]
-        system_boundaries, ud_boundaries = get_system_boundaries(obj)
-        ## ----------------------------------------------------- ##    
-        j = 0
-        D = [0,0,0]
-        for atom in range(natoms):
-            t = data[TYPE][atom]
-            if (t in types):
-                x = data[X][atom]
-                y = data[Y][atom]
-                z = data[Z][atom]
-                if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
-                     ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
-                     ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
-
-                         j += 1
-                         q = data[Q][atom]
-                         x = data[X][atom]
-                         y = data[Y][atom]
-                         z = data[Z][atom]
-                     
-                         D[0] += q*x
-                         D[1] += q*y
-                         D[2] += q*z
+        if (i >= skipframes):
+            printframe(i+1,nframes)
+            natoms = obj.natoms[-1]
+            system_boundaries, ud_boundaries = get_system_boundaries(obj)
+            ## ----------------------------------------------------- ##    
+            j = 0
+            for atom in range(natoms):
+                t = data[TYPE][atom]
+                if (t in types):
+                    x = data[X][atom]
+                    y = data[Y][atom]
+                    z = data[Z][atom]
+                    if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
+                         ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
+                         ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
     
-    D = np.array(D)/nframes
+                             j += 1
+                             q = data[Q][atom]
+                             x = data[X][atom]
+                             y = data[Y][atom]
+                             z = data[Z][atom]
+                         
+                             D[0] += q*x
+                             D[1] += q*y
+                             D[2] += q*z
+    
+    D = np.array(D)/(nframes-skipframes)
     print "\n \n   Done...\n   Assuming units real..."
     printline()
     print "   D =", D, " eA"
@@ -837,9 +783,84 @@ if args.totaldipolemoment:
     printEndOfMethod("totaldipolemoment")
     printline()
     obj.close_trj()
-    ##-- End of method        
-        
+    ##-- End of method                    
 
+if args.force:
+    """ 
+    Compute total forces on set of particles given:
+    -t = particle types
+    -x = bounds in x-direction of the system
+    -y = bounds in y-direction of the system
+    -z = bounds in z-direction of the system    
+    """
+        
+    obj = trj(args.inputfile[0]) # create LAMMPStrj object 
+    nframes = obj.nframes        # number of time frames in trajectory    
+    
+    ## ----------------------------------------------------- ##
+    ID='id'                      # atom id
+    MOL='mol'                    # molecule id
+    TYPE='type'                  # atom type
+    Q='q'                        # charge
+    X='x'                        # unscaled atom position x
+    Y='y'                        # unscaled atom position y
+    Z='z'                        # unscaled atom position z
+    FX='fx'                      # force component x
+    FY='fy'                      # force component y
+    FZ='fz'                      # force component z
+    ## ----------------------------------------------------- ##    
+    if args.skipframes is None:
+        skipframes = 0
+    else:
+        skipframes = args.skipframes[0]
+
+    if (nframes <= skipframes):
+        wa_parser.error("--skipframes N < nframes")
+    
+    F_tot = [0,0,0]  # total force on group; F = (x,y,z)
+
+    print "\n   Computing...\n"
+    for i in range(nframes):
+        data = obj.get_data()
+        if (i >= skipframes):
+            printframe(i+1,nframes)
+            natoms = obj.natoms[-1]
+            system_boundaries, ud_boundaries = get_system_boundaries(obj)
+            ## ----------------------------------------------------- ##    
+            j = 0
+            for atom in range(natoms):
+                t = data[TYPE][atom]
+                if (t in types):
+                    x = data[X][atom]
+                    y = data[Y][atom]
+                    z = data[Z][atom]
+                    if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
+                         ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
+                         ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
+    
+                        j += 1
+    
+                        fx = data[FX][atom]
+                        fy = data[FY][atom]
+                        fz = data[FZ][atom]
+                        #print "\n ", fx,fy,fz
+                        
+                        F_tot[0] += fx
+                        F_tot[1] += fy
+                        F_tot[2] += fz
+                        #print data[FZ][atom]
+        #print j
+        
+    F_tot = np.array(F_tot)/(nframes-skipframes)
+    print "\n \n   Done...\n   Assuming units real..."    
+    printline()
+    print "   Force =", F_tot, " kcal/mol/angstrom"
+    print "   Force =", F_tot*nN, " nN"
+    printline()
+    printEndOfMethod("force")
+    printline()
+    obj.close_trj()
+    ##-- End of method
 
         
-        
+## ------------------------------------------------------------------------- ##
