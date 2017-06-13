@@ -11,6 +11,12 @@
 
 2) eldip.py
 	- utilizes readlammpstrj.py
+		* lammpstrajectory should contain information about:
+			1) x,y,z
+			2) q
+			3) id
+			4) mol
+			3) fx,fy,fz
 	- computes the electric dipolemoment of atoms
 	  within the same molecule (only for three atoms at a time)
 	- 1D and 2D binning
