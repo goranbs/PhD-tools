@@ -770,8 +770,8 @@ if args.totaldipolemoment:
                     y = data[Y][atom]
                     z = data[Z][atom]
                     x = minimum_image(x,system_boundaries[0,0], system_boundaries[0,1])
-                    y = minimum_image(x,system_boundaries[1,0], system_boundaries[1,1])
-                    x = minimum_image(x,system_boundaries[2,0], system_boundaries[2,1])
+                    y = minimum_image(y,system_boundaries[1,0], system_boundaries[1,1])
+                    z = minimum_image(z,system_boundaries[2,0], system_boundaries[2,1])
                     if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
                          ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
                          ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
@@ -848,8 +848,8 @@ if args.force:
                     y = data[Y][atom]
                     z = data[Z][atom]
                     x = minimum_image(x,system_boundaries[0,0], system_boundaries[0,1])
-                    y = minimum_image(x,system_boundaries[1,0], system_boundaries[1,1])
-                    x = minimum_image(x,system_boundaries[2,0], system_boundaries[2,1])
+                    y = minimum_image(y,system_boundaries[1,0], system_boundaries[1,1])
+                    z = minimum_image(z,system_boundaries[2,0], system_boundaries[2,1])
                     if ( ud_boundaries[0,0] <= x <= ud_boundaries[0,1] and \
                          ud_boundaries[1,0] <= y <= ud_boundaries[1,1] and \
                          ud_boundaries[2,0] <= z <= ud_boundaries[2,1]):
@@ -861,6 +861,11 @@ if args.force:
                              F_tot[0] += fx
                              F_tot[1] += fy
                              F_tot[2] += fz
+                    #else:
+                     #   print "Shit"
+                      #  print ud_boundaries[0,0], x, ud_boundaries[0,1]
+                       # print ud_boundaries[1,0], y, ud_boundaries[1,1]
+                        #print ud_boundaries[2,0], z, ud_boundaries[2,1]
         #print j
         
     F_tot = np.array(F_tot)/(nframes-skipframes)
