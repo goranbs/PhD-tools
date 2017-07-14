@@ -180,10 +180,15 @@ plot 	'${file}.ravg' u (\$2*ns):5 w l t gprintf(\"lower slab z=%.3f {\305}\",mea
 
 if [ "$term" == "eps" ] ; then
 	gnuplot energy-fe-fse.gnu
+	mv fit.log fit-energy-fe-fse.log
 	gnuplot forces.gnu
+	mv fit.log fit-forces.log
 	gnuplot nconf.gnu
+	mv fit.log fit-nconf.log
 	gnuplot pe.gnu
+
 	gnuplot upper-lower-COM.gnu
+	mv fit.log fit-upper-lower-COM.log
 fi
 
 # EOF
