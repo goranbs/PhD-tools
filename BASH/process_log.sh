@@ -14,6 +14,11 @@
 # 	a) If terminal is set to "postscript"; create EPS files of graphs
 #	b) If terminal is set to "x11"       ; do nothing 
 #	c) Default terminal: x11
+#
+# DEPENDENCIES:
+#		kk.awk
+#		striplog.sh
+#
 # --------------------------------------------------------------------------------------- #
 
 args=("$@")
@@ -23,8 +28,9 @@ term=${args[1]}		# optional terminal type: 1) x11 2) ps,eps,postscript
 
 bash striplog.sh $file
 
-awk -f kk.awk $file > ${file}.ravg
+awk -f kk.awk ${file}.out > ${file}.ravg
 
+rm ${file}.out		# delete tmp file created by striplog.sh
 
 # --------------------------------------------------------------------------------------- #
 # ---------------------- WRITE GNUPLOT FILES -------------------------------------------- #
