@@ -1,0 +1,5 @@
+*.gnu
+*.eps
+*.out
+*.ravg
+fit.log
