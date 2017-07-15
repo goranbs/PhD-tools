@@ -12,7 +12,7 @@ args=("$@")
 file=${args[0]}
 
 # find first line matching "Step" then print all subsequent lines;
-sed -i -n '/Step/,$p' $file
+sed -i.bak -n '/Step/,$p' $file
 
 # print all lines from the first until "Loop time" is found;
 sed -i -n '1,/Loop time/ p' $file
