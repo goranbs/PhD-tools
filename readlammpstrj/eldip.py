@@ -69,6 +69,8 @@ wa_parser.add_argument('-s','--totaldipolemoment', action='store_true',
                     help='Method: Compute total electric dipole moment of system given -t. Optional: -x, -y and -z.')
 wa_parser.add_argument('-f','--force', action='store_true', 
                     help='Method: Compute total force on particles given -t. Optional: -x, -y and -z.')
+wa_parser.add_argument('-v','--volume', action='store_true', 
+                    help='Method: Return volume, cell vectors and inclination angles. Output; time, V, a, b, c, alpha, beta, gamma.')
 wa_parser.add_argument('-p', '--dump1d', action='store_true',
                        help='Dump one file for each bin containing dipole moments of all molecules. Cartesian and spherical coordinates.')
 wa_parser.add_argument('-n', '--normal', metavar=('x','y','z'), type=float, nargs=3,
@@ -91,21 +93,23 @@ args = wa_parser.parse_args()
 
 #########################################################
 
-if not (args.dipolemoments or args.totaldipolemoment or args.force):
+if not (args.dipolemoments or args.totaldipolemoment or args.force or args.volume):
     wa_parser.error("No action reqested! Provide -dipolemoments or -totaldipolemoment or -force")
     
 if not (args.inputfile):
     wa_parser.error("No Input file provided! Provide input file through -inputfile")
-    
+
 if not (args.types):
-    wa_parser.error("No atom types provided! Provide types through -types")
+    if not (args.volume):
+        wa_parser.error("No atom types provided! Provide types through -types")
 
-types = args.types[0].replace(']', '')
-types = types.replace('[', '')
-types = types.split(',')
-types = [int(atype) for atype in types]
+if (args.types):
+    types = args.types[0].replace(']', '')
+    types = types.replace('[', '')
+    types = types.split(',')
+    types = [int(atype) for atype in types]
+
 prefix = args.outputprefix
-
 if args.xrange is None:
     args.xrange = [None,None]
 if args.yrange is None:
@@ -127,7 +131,8 @@ print "   xrange                 : ", args.xrange
 print "   yrange                 : ", args.yrange
 print "   zrange                 : ", args.zrange
 print "   normal                 : ", normal
-print "   types                  : ", types
+if (args.types):
+    print "   types                  : ", types
 print "   input file name        : ", args.inputfile
 print "   output prefix          : ", prefix
 print "   skip N frames          : ", args.skipframes
@@ -582,11 +587,11 @@ if args.dipolemoments:
             for j in xrange(nbins):
                 divisor = bins[j][9]       # number of molecules in bin: N
                 if (divisor == 0):         # if no particles in bin
-                    bins[j][3] = 1/3.      # this assures Tp(z) = -0.5
-                    bins[j][4] = 1/3.      # this assures Tp(z) = -0.5
-                    bins[j][5] = 1/3.      # this assures Tp(z) = -0.5
-                    bins[j][6] = 1/3.      # this assures Tp(z) = -0.5
-                    bins[j][8] = 90        # phi if no samples
+                    bins[j][3] = 1/3.      # this assures Tp(z) = -0.5 if zero water
+                    bins[j][4] = 1/3.      # this assures Tp(z) = -0.5 if zero water
+                    bins[j][5] = 1/3.      # this assures Tp(z) = -0.5 if zero water
+                    bins[j][6] = 1/3.      # this assures Tp(z) = -0.5 if zero water
+                    bins[j][8] = 90        # phi if no samples (zero water)
                 else:
                     bins[j][3] /= divisor  # divide costheta**2 by number of molecules
                     bins[j][4] /= divisor  # average angle theta of molecules in bin
@@ -836,7 +841,7 @@ if args.force:
     for i in range(nframes):
         data = obj.get_data()
         if (i >= skipframes):
-            #printframe(i+1,nframes)
+            printframe(i+1,nframes)
             natoms = obj.natoms[-1]
             system_boundaries, ud_boundaries = get_system_boundaries(obj)
             ## ----------------------------------------------------- ##    
@@ -878,6 +883,66 @@ if args.force:
     printline()
     obj.close_trj()
     ##-- End of method
+    
+    
+if args.volume:
+    """ 
+    Get system volume, cell vecors and inclination angles:
+    
+    Save to file:
+    time V a b c alpha beta gamma
+    """
+        
+    obj = trj(args.inputfile[0]) # create LAMMPStrj object 
+    nframes = obj.nframes        # number of time frames in trajectory    
+    Vinit = obj.get_volume()     # initial volume of simulation box
 
+    if args.skipframes is None:
+        skipframes = 0
+    else:
+        skipframes = args.skipframes[0]
+
+    if (nframes <= skipframes):
+        wa_parser.error("--skipframes N < nframes")
+    
+    keys = ["time","volume","a","b","c","alpha","beta","gamma"]
+    values = {keys[0]: [], keys[1]: [], keys[2]: [], keys[3]: [], keys[4]: [], keys[5]: [], keys[6]: [], keys[7]: []}
+
+    print "\n   Computing...\n"
+    for i in range(nframes):
+        data = obj.get_data()
+        if (i >= skipframes):
+            printframe(i+1,nframes)
+            natoms = obj.natoms[-1]
+            
+            values["time"].append(obj.timesteps[-1])
+            values["volume"].append(obj.get_volume())
+            values["a"].append(obj.a)
+            values["b"].append(obj.b)
+            values["c"].append(obj.c)
+            values["alpha"].append(obj.alpha)
+            values["beta"].append(obj.beta)
+            values["gamma"].append(obj.gamma)
+            
+    if prefix == None:
+        outfile = "volume.dat"
+    else:
+        outfile = prefix[0] + "_volume.dat"
+        
+    data = []
+    for key in keys:
+        data.append(values[key])
+
+    write_to_file(outfile,data,keys)
+
+    print "\n \n   Done...\n   Assuming units real..."    
+    printline()
+    print "   Initial volume =", Vinit
+    print "   Final volume   =", values["volume"][-1]
+    printline()
+    printEndOfMethod("force")
+    printline()
+    obj.close_trj()
+    ##-- End of method
         
 ## ------------------------------------------------------------------------- ##
