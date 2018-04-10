@@ -1,0 +1,52 @@
+##############################################################
+#
+# generate test systems for fractal-dimension calculations
+#
+##############################################################
+
+units		lj
+boundary	p p p
+neighbor	0.3 bin
+
+variable	S equal 20
+
+region		Box block 0 $S 0 $S 0 $S side in
+#region          Box block 0 2 0 3 0 4 side in
+
+create_box	1 Box
+
+# -- RANDOM CONFIG:
+#lattice		sc 1.0
+#create_atoms	1 random 1000 123456 Box units lattice
+#write_dump	all atom random.lammpstrj
+
+# -- RANDOM CONFIG custom:
+#lattice		sc 1.0
+#create_atoms	1 random 1000 123456 Box units lattice
+#write_dump	all custom random-unscaled.lammpstrj id x y z
+
+# -- LATTICE Sentered-Cubic:
+#lattice		sc 1.0
+#create_atoms	1 region Box units lattice
+#write_dump	all atom sc.lammpstrj
+
+# -- LATTICE Face-centered-Cubic:
+lattice         fcc 1.0
+create_atoms    1 region Box units lattice
+write_dump      all atom fcc-3D.lammpstrj
+region		Sub block EDGE EDGE EDGE EDGE 0.5 EDGE side in
+delete_atoms	region Sub
+write_dump      all atom fcc-2D.lammpstrj
+region		Sub2 block EDGE EDGE 0.5 EDGE EDGE EDGE side in
+delete_atoms	region Sub2
+write_dump      all atom fcc-1D.lammpstrj
+
+# -- LATTICE Face-centered-Cubic custom:
+#lattice         fcc 1.0
+#create_atoms    1 region Box units lattice
+#write_dump      all custom fcc-unscaled.lammpstrj id x y z
+
+# -- single particle:
+#create_atoms	1 single 1 2 3
+#write_dump	all atom single.lammpstrj 
+
