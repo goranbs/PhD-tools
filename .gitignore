@@ -1,0 +1,10 @@
+
+*.out
+*.dat
+*.pdf
+*.eps
+*.log
+*.bak
+*.backup
+*.profile
+*#
