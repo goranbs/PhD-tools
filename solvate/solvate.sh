@@ -39,6 +39,8 @@ rm ${tmpfile1} ${tmpfile2}
 
 echo "mol new ${vmdfile}" >> ${outfile}
 echo "topo guessangles -sel waters" >> ${outfile}
+#echo 'set sel [atomselect top "resname SRF"]'
+#echo "atomselect0 set charge 0.0509259259259259"
 echo "topo writelammpsdata ${lammpsfile} full" >> ${outfile}
 echo "quit" >> ${outfile}
 

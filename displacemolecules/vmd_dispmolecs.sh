@@ -1,4 +1,4 @@
-#!/bin/bh
+#!/bin/bash
 ############################################################################
 #
 # bash script vmd_displace_molecules.sh
@@ -15,7 +15,7 @@
 #      |   ______    |
 #      |   |    |    |-> COM upper molecule
 #      |   ------    |--
-#      |             |  dist
+#      |             |  sep
 #      |   ______    |__
 #      |   |    |    |-> COM lower molecule
 #      |   ------    |
@@ -29,40 +29,38 @@ args=("$@")          # input arguments
 
 # ---------------- Set values from input args --------------------------- #
 
-molecule1=${args[0]} # upper molecule
-molecule2=${args[1]} # lower molecule
+molecule1=${args[0]} # upper molecule m1
+molecule2=${args[1]} # lower molecule m2
 
-x=${args[2]}         # pbc x
-y=${args[3]}         # pbc y
-z=${args[4]}         # pbc z
+x=${args[2]}         # final pbc x
+y=${args[3]}         # final pbc y
+z=${args[4]}         # final pbc z
 
-zm1=${args[5]}       # z displacement of lower molecule
-dist=${args[6]}      # surface distance between molecules
-deg=${args[7]}       # angle of horizontal (z) rotation for upper molecule
-z0=${args[8]}        # initial separation of lower molecule
-name=${args[9]}      # prefix of output filenames
-
-#-- print input info
-echo "molecule1: ${molecule1}"
-echo "molecule2: ${molecule2}"
-echo "x   =$x"
-echo "y   =$y"
-echo "z   =$z" 
-echo "zm1 =$zm1"
-echo "dist=${dist}"
-echo "deg =${deg}"
-echo "z0  =${z0}"
+sep=${args[5]}       # interfacial separation
+deg=${args[6]}       # angle of horizontal (z) rotation for upper molecule
+name=${args[7]}      # prefix of output filenames
+t1=${args[8]}        # thickness of m1
+t2=${args[9]}       # thickness of m2
 
 #-- midpoints of pbc system
 xm=$(echo "scale=5; $x/2" | bc)  # x centering of slabs
 ym=$(echo "scale=5; $y/2" | bc)  # y centering of slabs
+zm=$(echo "scale=5; $z/2" | bc)  # z centering of slabs
 
-#-- displacement of upper molecule
-zm2=$(echo "scale=5; ${z0}+${dist}" | bc) 
-# !NB: thickness of lower molecules is computed and taken into accout.
 
 #-- output name of new pdb configuration
-output="${name}_rot${deg}_sep${dist}" # acc. to rotation and separation
+output="${name}_rot${deg}_sep${sep}" # acc. to rotation and separation
+
+#-- print input info
+echo "molecule1: ${molecule1}"      # m2
+echo "molecule2: ${molecule2}"      # m1
+echo "x   =$x"                      # final pbc x
+echo "y   =$y"                      # final pbc y
+echo "z   =$z"                      # final pbc z
+echo "COMd=${sep}"                  # interfacial sep
+echo "deg =${deg}"                  # angle rot around y
+echo "t1  =${t1}"                   # thickness of molecule1
+echo "t2  =${t2}"                   # thickness of molecule2
 
 # ------------- create readable file for vmd  ------------- #
 
@@ -90,28 +88,23 @@ outfile="tmp.vmd"  # temporary input file for vmd
 echo "mol new ${molecule1}" >> ${outfile}
 echo "set sel [atomselect 0 all]" >> ${outfile}
 echo "set C [measure center atomselect0]" >> ${outfile}
-echo 'lassign $C a b c' >> ${outfile}
+echo "lassign $C a b c" >> ${outfile}
+echo "set A [pbc get]" >> ${outfile} # could alternatively be used? If I had managed...
+echo 'lassign $A x y z j k l' >> ${outfile}
 echo 'atomselect0 moveby [vecinvert $C]' >> ${outfile}
-echo "atomselect0 moveby {0 0 ${zm2}}" >> ${outfile}
 echo "atomselect0 move [transaxis z ${deg}]" >> ${outfile}
 
 #-- load initial molecule to origin, and move into pbc box:
 echo "mol new ${molecule2}" >> ${outfile}
+echo "set B [pbc get]" >> ${outfile}
+echo 'lassign $B xx yy zz jj kk ll' ${outfile}
 echo "pbc set {${x} ${y} ${z}}" >> ${outfile}
 echo "set sel [atomselect 1 all]" >> ${outfile}
 echo "set D [measure center atomselect2]" >> ${outfile}
 echo 'lassign $D d e f' >> ${outfile}
 echo 'atomselect2 moveby [vecinvert $D]' >> ${outfile}
-echo "atomselect2 moveby {0 0 ${zm1}}" >> ${outfile}
-
-#-- move upper molecule according to thickness of the two
-#   molecules. This assures that the the distance of
-#   separation of the two molecules is according to the
-#   geometrical thickness of the molecules.
-echo 'set c1 "0 0 $c"' >> ${outfile}
-echo 'set f1 "0 0 $f"' >> ${outfile}
-echo 'atomselect0 moveby $c1' >> ${outfile}
-echo 'atomselect0 moveby $f1' >> ${outfile}
+echo "atomselect2 moveby {0 0 ${sep}}" >> ${outfile}
+echo "atomselect2 moveby {0 0 ${t1}}" >> ${outfile}
 
 #-- compute final geometrical positions of COM
 echo "measure center atomselect0" >> ${outfile}
@@ -123,16 +116,23 @@ echo "set kk {}" >> ${outfile}
 echo "lappend kk atomselect0 atomselect2" >> ${outfile}
 echo 'set mol [::TopoTools::selections2mol $kk]' >> ${outfile}
 echo "set sel [atomselect 2 all]" >> ${outfile}
-echo "atomselect10 moveby {${xm} ${ym} 0}" >> ${outfile}
+half_t1=$(echo "scale=5; ${t1}/2.0 " | bc)
+half_t2=$(echo "scale=5; ${t2}/2.0 " | bc)
+z0=$(echo "scale=5; (${zm}-${t1}-${half_t2})" | bc)
+echo ${half_t1} ${z0}
+echo "atomselect10 moveby {${xm} ${ym} ${half_t1}}" >> ${outfile}
+echo "atomselect10 moveby {0 0 ${z0}}" >> ${outfile}
 echo "mol delete 0" >> ${outfile}
 echo "mol delete 1" >> ${outfile}
+echo "pbc set {${x} ${y} ${z}}" >> ${outfile}
 
 #-- write output file:
 echo "animate write pdb ${output}.pdb 2" >> ${outfile}
+#echo "topo writelammpsdata ${output}.data full" >> ${outfile}
 echo exit >> ${outfile}
 
 vmd -e ${outfile} # run vmd with commands in ${outfile}
-#rm ${outfile}     # delete temporary file: ${outfile}
+rm ${outfile}     # delete temporary file: ${outfile}
 
 
 #-- EOF

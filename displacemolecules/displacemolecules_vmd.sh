@@ -49,18 +49,24 @@
 ###############################################################################
 
 #-- Input parameters
-m1='calcite_slab.pdb'           # upper molecule
-m2='calcite_slab.pdb'           # lower molecule
+#m1='final_calcite_slab.pdb' #'z_top_withResname.pdb'
+#m2='final_calcite_slab.pdb' #'z_low_withResname.pdb'
+#m1='aragonite_slab_centered.pdb'
+#m2='aragonite_slab_centered.pdb'
+m1='gold-slab-773.pdb'
+m2='gold-slab-773.pdb'
 
-name='cal'                      # prefix of output filenames
 
-x=80.0                          # final pbc x
-y=39.7                          # final pbc y
-z=83.1                          # final pbc z
+name='gold-773-8nm'               # prefix of output filenames
 
-z0=25.0                         # displacement of lower molecule, molec2
-d=17.0                          # initial interfacial distance between m1, m2
-deg=45.0                        # angle of rotation for upper molecule
+x=28.5474 #49.616 #49.394 #50.0                            # final pbc x
+y=28.5474 #39.853 #40.721 #24.4692                         # final pbc y
+z=101 #48 #75.0                            # final pbc z
+t1=10.39 #17.218 #10.3979                        # thickness of m1
+t2=10.39 #17.218 #10.3979                        # thickness of m2 
+
+d=70                              # initial shortest interfacial separation
+deg=0                             # angle of in plane rotation for upper mol
 
 # ------------------- Perform backups of molecules -------------------------- #
 cp ${m1} backup-${m1} # backup of molecule1
@@ -69,11 +75,26 @@ cp ${m2} backup-${m2} # backup of molecule2
 
 #-- Run vmd_dispmolecs.sh to create systems of z displaced molecules m1 and m2.
 #   Decreasing molecule distance separations by i, from initial separation d, 
-#   create systems:
-#   for i in 0 0.1 0.2 0.3; do
-for i in 0; do                
-	zm1=$(echo "scale=5; ${z0}+$i" | bc)
-	./vmd_dispmolecs.sh ${m1} ${m2} $x $y $z ${zm1} $d ${deg} ${z0} ${name}
+#   create nsep systems with increasing separation d+i*res:
+
+nsep=1                                            # number of separations
+res=0.5                                            # resolution of separations
+
+
+# --------------------------------------------------------------------------- #
+sep=${d}                                           # initial separation
+fsep=$(echo "scale=5; ${d}+${nsep}*${res} " | bc)  # final separation
+i=1                                                # counter 
+# --------------------------------------------------------------------------- #
+
+until [ $i -gt ${nsep} ] ; do
+	
+	echo $i ${sep}
+
+	./vmd_dispmolecs.sh ${m1} ${m2} $x $y $z ${sep} ${deg} ${name} ${t1} ${t2}
+	
+	sep=$(echo "scale=5; ${sep}+${res} " | bc)
+	let i+=1
 done
 
 #-- EOF

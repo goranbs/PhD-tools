@@ -1,0 +1,97 @@
+###############################################################################
+#
+# Gold and spce force field
+#
+# Use either
+# 		pair_style hybrid/overlay
+# 		pair_style lj/cut/coul/long (need to modfy this file)
+###############################################################################
+	
+	## -- Atoms
+        variable Au equal 1                   # gold
+        variable Hw1 equal 2                  # water hydrogen nr 1
+        variable Hw2 equal 3                  # water hydrogen nr 2
+        variable Ow equal 4                   # water oxygen
+#        variable Na equal 5                   # Na
+#        variable Cl equal 5                   # Cl
+
+	## -- groups
+        group Au type ${Au}                   # Au
+        group spce type ${Ow} ${Hw1} ${Hw2}   # all spce water atoms
+        group Hw type ${Hw1} ${Hw2}           # water hydrogen
+        group Ow type ${Ow}                   # water oxygen
+#        group Na type ${Na}                   # Na
+#        group Cl type ${Cl}                   # Cl
+
+	## -- masses
+	variable mAu equal 196.966
+	variable mH equal 1.008
+	variable mO equal 15.9994
+	variable mNa equal 22.990
+	variable mCl equal 35.453
+	#- rescaling of mass (reduce viscosity):
+	#- NB! reduce time step as well!
+	variable r equal 1.0
+
+        mass ${Au} ${mAu}*$r                  # Au
+        mass ${Hw1} ${mH}*$r                  # Hw1
+        mass ${Hw2} ${mH}*$r                  # Hw2
+        mass ${Ow} ${mO}*$r                   # Ow
+#        mass ${Na} ${mNa}*$r                  # Na
+#        mass ${Cl} ${mCl}*$r                  # Cl
+
+	## -- charges
+#        set type ${Au} charge 0.000000       # Au
+        set type ${Hw1} charge 0.4238        # Hw1  (SPCE)
+        set type ${Hw2} charge 0.4238        # Hw2  (SPCE)
+        set type ${Ow} charge -0.8476        # Ow   (SPCE)
+#        set type ${Na} charge 1              # Na
+#        set type ${Cl} charge -1             # Cl
+	
+	######################################################################
+	## -- Force field
+
+        pair_coeff * * coul/long                              # Coulomb
+
+        # -- H2O: SPC/E water model
+        pair_coeff ${Ow} ${Ow} lj/cut 0.155354 3.166          # LJ Ow-Ow (SPCE)
+
+        #- NaCl: Dang & Smith 1994
+#        pair_coeff ${Na} ${Na} lj/cut 0.13 2.35                              # Na-Na
+#        pair_coeff ${Cl} ${Cl} lj/cut 0.10 4.40                              # Cl-Cl
+
+        # -- Au paramters from: Heinz et. al. 2008
+        # pair_coeff lj/cut i j epsilon sigma cut1 cut2
+
+#        pair_coeff ${Au} ${Au} lj/cut 5.29 2.951              # lj Au-Au (Heinz 1)
+        pair_coeff ${Au} ${Au} lj/cut 5.29 2.629              # lj Au-Au (Heinz 2)
+
+	# -- Perform arithmetic mixing of LJ-parameters
+#        pair_coeff ${Au} ${Ow} lj/cut 0.9065443508179839 3.0585 # lj Au-Ow (mixing rules 1)
+        pair_coeff ${Au} ${Ow} lj/cut 0.9065443508179839 2.8975  # lj Au-Ow (mixing rules 2)
+
+        #- NaCl <-> H2O
+#        pair_coeff ${Ow} ${Na} lj/cut 0.142088000901 2.758                   # Ow-Na
+#        pair_coeff ${Ow} ${Cl} lj/cut 0.124619420637 3.783                   # Ow-Cl
+
+	#- NaCl <-> Au
+#	pair_coeff ${Au} ${Na} lj/cut 0.8292767933567176 2.4895              # Au-Na
+#        pair_coeff ${Au} ${Cl} lj/cut 0.7273238618387272 3.5145              # Au-Cl
+
+	#pair_modify mix arithmetic
+
+        ## -- Bonded interactions ----------------------------------------------------------------
+        #- harmonic bond and angle terms
+
+        bond_style harmonic
+        bond_coeff 1 554.1349 1.0
+
+        angle_style harmonic
+        angle_coeff 1 45.7696 109.47
+        ##########################################################################################
+        ## Fix shake during simulation -- 2fsec time step may be used ----------------------------
+        fix SHAKE spce shake 0.0001 1000 0 b 1 a 1
+        # (lammps quirk: Remember to "unfix fSHAKE" during minimization.)
+        ##########################################################################################
+            
+

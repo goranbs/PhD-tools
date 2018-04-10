@@ -1,0 +1,208 @@
+LAMMPS (17 Nov 2016)
+#############################################################################################
+#
+# filename: "in.run"
+#
+#############################################################################################
+
+# ---------------   System information   --------------------
+units            real
+atom_style       full
+boundary         p p p
+neighbor         0.3 bin
+neigh_modify     every 1 delay 1 check yes one 3000
+kspace_style     pppm 1.0e-4
+variable         cutoff equal 12.5
+pair_style       hybrid/overlay lj/cut ${cutoff} coul/long ${cutoff}
+pair_style       hybrid/overlay lj/cut 12.5 coul/long ${cutoff}
+pair_style       hybrid/overlay lj/cut 12.5 coul/long 12.5
+bond_style       harmonic
+angle_style      harmonic
+
+# ---------------------------  Gold and  spce  ----------------------------------------------
+
+read_data "gold-773-8nm.data"
+  orthogonal box = (0.2175 0.352 -0.805001) to (28.7645 28.899 101.195)
+  1 by 2 by 6 MPI processor grid
+  reading atoms ...
+  7446 atoms
+  scanning bonds ...
+  2 = max bonds/atom
+  scanning angles ...
+  1 = max angles/atom
+  reading bonds ...
+  4180 bonds
+  reading angles ...
+  2090 angles
+  2 = max # of 1-2 neighbors
+  1 = max # of 1-3 neighbors
+  1 = max # of 1-4 neighbors
+  2 = max # of special neighbors
+include "ff-Au-spce-Cl.in.settings"       # Force field
+###############################################################################
+#
+# Gold and spce force field
+#
+# Use either
+# 		pair_style hybrid/overlay
+# 		pair_style lj/cut/coul/long (need to modfy this file)
+###############################################################################
+
+	## -- Atoms
+        variable Au equal 1                   # gold
+        variable Hw1 equal 2                  # water hydrogen nr 1
+        variable Hw2 equal 3                  # water hydrogen nr 2
+        variable Ow equal 4                   # water oxygen
+#        variable Na equal 5                   # Na
+#        variable Cl equal 5                   # Cl
+
+	## -- groups
+        group Au type ${Au}                   # Au
+        group Au type 1                   
+1176 atoms in group Au
+        group spce type ${Ow} ${Hw1} ${Hw2}   # all spce water atoms
+        group spce type 4 ${Hw1} ${Hw2}   
+        group spce type 4 2 ${Hw2}   
+        group spce type 4 2 3   
+6270 atoms in group spce
+        group Hw type ${Hw1} ${Hw2}           # water hydrogen
+        group Hw type 2 ${Hw2}           
+        group Hw type 2 3           
+4180 atoms in group Hw
+        group Ow type ${Ow}                   # water oxygen
+        group Ow type 4                   
+2090 atoms in group Ow
+#        group Na type ${Na}                   # Na
+#        group Cl type ${Cl}                   # Cl
+
+	## -- masses
+	variable mAu equal 196.966
+	variable mH equal 1.008
+	variable mO equal 15.9994
+	variable mNa equal 22.990
+	variable mCl equal 35.453
+	#- rescaling of mass (reduce viscosity):
+	#- NB! reduce time step as well!
+	variable r equal 1.0
+
+        mass ${Au} ${mAu}*$r                  # Au
+        mass 1 ${mAu}*$r                  
+        mass 1 196.966*$r                  
+        mass 1 196.966*1                  
+        mass ${Hw1} ${mH}*$r                  # Hw1
+        mass 2 ${mH}*$r                  
+        mass 2 1.008*$r                  
+        mass 2 1.008*1                  
+        mass ${Hw2} ${mH}*$r                  # Hw2
+        mass 3 ${mH}*$r                  
+        mass 3 1.008*$r                  
+        mass 3 1.008*1                  
+        mass ${Ow} ${mO}*$r                   # Ow
+        mass 4 ${mO}*$r                   
+        mass 4 15.9994*$r                   
+        mass 4 15.9994*1                   
+#        mass ${Na} ${mNa}*$r                  # Na
+#        mass ${Cl} ${mCl}*$r                  # Cl
+
+	## -- charges
+#        set type ${Au} charge 0.000000       # Au
+        set type ${Hw1} charge 0.4238        # Hw1  (SPCE)
+        set type 2 charge 0.4238        
+  2090 settings made for charge
+        set type ${Hw2} charge 0.4238        # Hw2  (SPCE)
+        set type 3 charge 0.4238        
+  2090 settings made for charge
+        set type ${Ow} charge -0.8476        # Ow   (SPCE)
+        set type 4 charge -0.8476        
+  2090 settings made for charge
+#        set type ${Na} charge 1              # Na
+#        set type ${Cl} charge -1             # Cl
+
+	######################################################################
+	## -- Force field
+
+        pair_coeff * * coul/long                              # Coulomb
+
+        # -- H2O: SPC/E water model
+        pair_coeff ${Ow} ${Ow} lj/cut 0.155354 3.166          # LJ Ow-Ow (SPCE)
+        pair_coeff 4 ${Ow} lj/cut 0.155354 3.166          
+        pair_coeff 4 4 lj/cut 0.155354 3.166          
+
+        #- NaCl: Dang & Smith 1994
+#        pair_coeff ${Na} ${Na} lj/cut 0.13 2.35                              # Na-Na
+#        pair_coeff ${Cl} ${Cl} lj/cut 0.10 4.40                              # Cl-Cl
+
+        # -- Au paramters from: Heinz et. al. 2008
+        # pair_coeff lj/cut i j epsilon sigma cut1 cut2
+
+#        pair_coeff ${Au} ${Au} lj/cut 5.29 2.951              # lj Au-Au (Heinz 1)
+        pair_coeff ${Au} ${Au} lj/cut 5.29 2.629              # lj Au-Au (Heinz 2)
+        pair_coeff 1 ${Au} lj/cut 5.29 2.629              
+        pair_coeff 1 1 lj/cut 5.29 2.629              
+
+	# -- Perform arithmetic mixing of LJ-parameters
+#        pair_coeff ${Au} ${Ow} lj/cut 0.9065443508179839 3.0585 # lj Au-Ow (mixing rules 1)
+        pair_coeff ${Au} ${Ow} lj/cut 0.9065443508179839 2.8975  # lj Au-Ow (mixing rules 2)
+        pair_coeff 1 ${Ow} lj/cut 0.9065443508179839 2.8975  
+        pair_coeff 1 4 lj/cut 0.9065443508179839 2.8975  
+
+        #- NaCl <-> H2O
+#        pair_coeff ${Ow} ${Na} lj/cut 0.142088000901 2.758                   # Ow-Na
+#        pair_coeff ${Ow} ${Cl} lj/cut 0.124619420637 3.783                   # Ow-Cl
+
+	#- NaCl <-> Au
+#	pair_coeff ${Au} ${Na} lj/cut 0.8292767933567176 2.4895              # Au-Na
+#        pair_coeff ${Au} ${Cl} lj/cut 0.7273238618387272 3.5145              # Au-Cl
+
+	#pair_modify mix arithmetic
+
+        ## -- Bonded interactions ----------------------------------------------------------------
+        #- harmonic bond and angle terms
+
+        bond_style harmonic
+        bond_coeff 1 554.1349 1.0
+
+        angle_style harmonic
+        angle_coeff 1 45.7696 109.47
+        ##########################################################################################
+        ## Fix shake during simulation -- 2fsec time step may be used ----------------------------
+        fix SHAKE spce shake 0.0001 1000 0 b 1 a 1
+  0 = # of size 2 clusters
+  0 = # of size 3 clusters
+  0 = # of size 4 clusters
+  2090 = # of frozen angles
+        # (lammps quirk: Remember to "unfix fSHAKE" during minimization.)
+        ##########################################################################################
+
+
+balance 1.0 shift z 10 1.0                  # balance cpus
+PPPM initialization ...
+WARNING: Using 12-bit tables for long-range coulomb (../kspace.cpp:317)
+  G vector (1/distance) = 0.205141
+  grid = 12 12 32
+  stencil order = 5
+  estimated absolute RMS force accuracy = 0.0335268
+  estimated relative force accuracy = 0.000100965
+  using double precision FFTs
+  3d grid and FFT values/proc = 2057 432
+Neighbor list info ...
+  2 neighbor list requests
+  update every 1 steps, delay 1 steps, check yes
+  max neighbors/atom: 3000, page size: 100000
+  master list distance cutoff = 12.8
+  ghost atom cutoff = 12.8
+  binsize = 6.4 -> bins = 5 5 16
+  rebalancing time: 0.00348711 seconds
+  iteration count = 10
+  initial/final max load/proc = 713 643
+  initial/final imbalance factor = 1.14907 1.03626
+  x cuts: 0 1
+  y cuts: 0 0.5 1
+  z cuts: 0 0.19987 0.351562 0.495117 0.647135 0.794434 1
+
+# -------------------------------------------------------------------------------------------
+variable name string 773-8nm
+variable runNr equal 2
+log log.lammps-${name}-${runNr}
+log log.lammps-773-8nm-${runNr}
+log log.lammps-773-8nm-2

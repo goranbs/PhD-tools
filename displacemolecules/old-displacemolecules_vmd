@@ -1,0 +1,101 @@
+#!/bin/bash
+
+##############################################################################
+#
+# script: displacemolecules_vmd.sh
+#
+# dependency: vmd, vmd_dispmolecs.sh
+#
+# Description:
+#
+# input molecule files; m1,m2; files must be readable by vmd
+# new system size pbc: x,y,z; displace molecules to center of pbc system.
+# displace molecule m1, as upper molecule, and rotate by angle; deg.
+# Lower molecule m2, is displaced z0 in z-direction.
+# Upper molecule m1, is displaced with an geometrical interfacial distance
+# z0 from from molecule m2, according to the geometrical thickness of the 
+# molecules.
+#
+# General description:
+#
+# Read two vmd compatible molecules, find geometrical center and displace
+# into new periodic box with dimention x,y,z, and align in z-direction. 
+# Displace according to thickness of lower molecule and the distance 
+# between molecule1 and molecule2.
+# Write output file with degree of rotation and estimated interfacial 
+# separtation.
+#
+#       _______________
+#   |   |   ______    |
+#   |   |   |    |    |-> COM upper molecule
+#   |   |   ------    |--
+#   z   |             |  dist
+#   |   |   ______    |__
+#   |   |   |    |    |-> COM lower molecule
+#   |   |   ------    |
+#   |   |             |
+#       ---------------
+#
+# TODO/bugs:
+#
+# 1) Using set sel with the "atomselect" command, returns a selection,
+#    this selection has been hard coded into the bash script, and might
+#    cause problems if not the same selection number is returned.
+#
+# 2) Only pdb files has been tested.
+#
+#                                  Author: Gøran Brekke Svaland 2016-06-22
+
+###############################################################################
+
+#-- Input parameters
+m1='gold-slab.pdb'
+m2='gold-slab.pdb'
+#m1='final_calcite_slab.pdb'      # re-equilibrated calcite slab
+#m2='final_calcite_slab.pdb'      # lower slab
+
+#m1='calcite_upsidedown.pdb'
+#m1='calcite_slab.pdb'           # upper molecule
+#m2='calcite_slab.pdb'           # lower molecule
+#m1='aragonite_slab_centered.pdb'
+#m2='aragonite_slab_centered.pdb'
+
+name='test'                       # prefix of output filenames
+
+#-- calcite: 80, 39.8, 95
+#-- new calcite: 80 40.72116 100
+#-- aragonite: 80, 39.853, 95
+#x=49.394001                      # final pbc x
+#y=40.721001                      # final pbc y
+#z=40                             # final pbc z
+
+x=24.4692
+y=24.4692
+z=100
+
+z0=25                            # displacement of lower molecule, molec2
+d=10                             # initial interfacial distance between m1, m2
+deg=0                            # angle of in plane rotation for upper molecule
+
+# ------------------- Perform backups of molecules -------------------------- #
+cp ${m1} backup-${m1} # backup of molecule1
+cp ${m2} backup-${m2} # backup of molecule2
+# --------------------------------------------------------------------------- #
+
+#-- Run vmd_dispmolecs.sh to create systems of z displaced molecules m1 and m2.
+#   Decreasing molecule distance separations by i, from initial separation d, 
+#   create systems:
+#   for i in 0 0.1 0.2 0.3; do
+
+final=1
+
+until [ ${d} -eq ${final} ] ; do
+	
+	zm1=$(echo "scale=5; ${z0}+$d" | bc)
+	
+	./vmd_dispmolecs.sh ${m1} ${m2} $x $y $z ${zm1} $d ${deg} ${z0} ${name}
+
+	let d-=1
+done
+
+#-- EOF
