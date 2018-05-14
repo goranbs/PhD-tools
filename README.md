@@ -29,3 +29,7 @@ Output LAMMPS data files and pdb files.
 	
 		display usage information:
 		>> python eldip.py -h
+
+4) hist-gauss
+	- compute histogram of input data set and make a fit to a gaussian
+
