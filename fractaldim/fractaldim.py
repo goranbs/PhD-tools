@@ -12,7 +12,8 @@ Output:
     prefix_XXXX.dat [chunkNr,rx,ry,rz,N,log(1/rx),log(1/rx),log(1/rx),log(N)]
         this file is output for each frame in the trajectory, and can be used to 
         compute the fractal dimension of the system: Df*log(N) ~ log(1/r), 
-        where Df is the fractal dimension of the system.
+        where Df is the fractal dimension of the system, by evaluating the slope
+        of log(N) vs. log(1/r).
         
         If the coordinates of the particles in the LAMMPS trajectory is in 
         fractional coordinates [xs,ys,zs], fractional coordinates will be used.
@@ -24,6 +25,10 @@ Dependencies:
     * numpy
     * argparse
     * sys
+
+* Triclinic box shapes are not supported!
+* Unwrapped coordinates are not supported!
+* Trajectories up to 9999 frames are supported
 
 """
 
@@ -40,11 +45,13 @@ wa_parser.add_argument('-i', '--inputfile', metavar=('filename'), type=str, narg
 wa_parser.add_argument('-t','--types', metavar='[1,2,...]', type=str, nargs=1,
                        help='Required! List of atom types to use e.g. [1,2,4] in lammpstrj file. White spaces = error!')
 wa_parser.add_argument('-n','--nbox', metavar='N', type=int, nargs=1,
-                       help='Partition system into N boxes in all dimensions. Default: N=100')
+                       help='Partition system into N boxes in all dimensions. Default: N=50')
 wa_parser.add_argument('-o', '--outputprefix', metavar=('filename'), type=str, nargs=1,
                        help='Output file name(s) prefix')     
 wa_parser.add_argument('-s', '--skipframes', metavar=('Nf'), type=int, nargs=1,
                        help='Skip the first Nf frames of the input trajectory. Default: Nf=0')
+wa_parser.add_argument('-e', '--every', metavar=('Ne'), type=int, nargs=1,
+                       help='Use every Ne frame in trajectory. Default: Ne=1')                       
 
 args = wa_parser.parse_args()
 
@@ -58,12 +65,17 @@ if not (args.types):
     wa_parser.error("No atom types provided! Provide types through --types")
         
 if not (args.nbox):
-    nbox = 100
+    nbox = 50
     nboxcubed = nbox**3
 else:
     nbox = args.nbox[0]
     nboxcubed = nbox**3
 
+if not (args.every):
+    every = 1
+else:
+    every = args.every[0]
+    
 if (args.types):
     types = args.types[0].replace(']', '')
     types = types.replace('[', '')
@@ -74,6 +86,7 @@ if not (args.outputprefix):
     prefix = 'output'
 else:
     prefix = args.outputprefix[0]
+    
 # --------------------------------------------------------------------------- #
 
 
@@ -190,21 +203,28 @@ if args.inputfile[0]:
     print "\n   Computing...\n"        
     for i in range(nframes):
         # -- Skip frames?
-        if (i >= skipframes):
+        if (i >= skipframes and i%every == 0):
             data = obj.get_data()
             natoms = obj.natoms[-1]
             system_boundaries, system_size = get_system_boundaries(obj)
             
-            boxes = np.zeros((nbox-1, nboxcubed))
+            #boxes = np.zeros((nbox-1, nboxcubed)) # memory inefficient!
+            N = np.zeros((nbox-1,)) # more memory efficient
             R = np.zeros((nbox-1,3))
-        
+
+            # parallellizable part?        
             for j in xrange(1,nbox):
+                    
+                    n = np.zeros((j*j*j,))
     
                     if useCoords == 'fractional':        
                         # fractional system size
                         dr = 1.0/float(j)
                         r = np.array([dr,dr,dr])
                         R[j-1] = r
+                        system_boundaries = np.zeros(np.shape(system_boundaries))
+                        system_boundaries[:,1] = 1
+                        system_size = np.ones(np.shape(system_size))
                     if useCoords == 'unscaled':
                         # unscaled coordinates
                         r = system_size/float(j)
@@ -218,16 +238,32 @@ if args.inputfile[0]:
                             ys = data[Ys][atom]
                             zs = data[Zs][atom]
                             
+                            # -- wrap particle into simulation box if outside box boundaries
+                            if xs < system_boundaries[0,0]:
+                                xs = xs + system_size[0]
+                            if xs > system_boundaries[0,1]:
+                                xs = xs - system_size[0]
+                                
+                            if ys < system_boundaries[1,0]:
+                                ys = ys + system_size[1]
+                            if ys > system_boundaries[1,1]:
+                                ys = ys - system_size[1]
+                                
+                            if zs < system_boundaries[2,0]:
+                                zs = zs + system_size[2]
+                            if zs > system_boundaries[2,1]:
+                                zs = zs - system_size[2]
+                            
                             xb = int(xs/r[0])
                             yb = int(ys/r[1])
                             zb = int(zs/r[2])
                             
                             index = xb*j**2 + yb*j + zb
                             
-                            boxes[j-1,index] = 1  # box is occupied
-        
+                            n[index] = 1 # box is occupied
 
-            N = np.sum(boxes,axis=1)
+                    N[j-1] = np.sum(n,axis=0)
+
             rx = R[:,0]
             ry = R[:,1]
             rz = R[:,2]

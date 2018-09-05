@@ -8,7 +8,7 @@ units		lj
 boundary	p p p
 neighbor	0.3 bin
 
-variable	S equal 20
+variable	S equal 40
 
 region		Box block 0 $S 0 $S 0 $S side in
 #region          Box block 0 2 0 3 0 4 side in
