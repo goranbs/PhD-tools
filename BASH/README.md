@@ -9,6 +9,7 @@ Useful and not so useful BASH scripts
 	* import two .pdb molecules readable for VMD and displace in z
 * GROMACSconfmerge
 	* merge two gromacs configurations into one
-
+* gnuplotting
+	* example files for scripts calling gnuplot for making plots
 
 
