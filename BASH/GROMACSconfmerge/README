@@ -1,0 +1,11 @@
+GROMACS: Script to merge 2 configurations into the 1 configuration i.e. if you have a slab and you wish to fill the confined region with solvent [||    || -> || SOLVENT || ], this will do this authomatically. 
+
+Instructions for use:
+
+- Choose a primary and a secondary conf (The conf with the confined region is the primary)
+
+- Translate the secondary conf into the confined region such that the coordinates are consistent (editconf -f conf.g96 -o confout.g96 -translate x y z)
+
+- Run the script (./emerge-confs.sh conf1.g96 conf2.g96 confout.g96)
+
+- Update the coordinates in confout.g96 

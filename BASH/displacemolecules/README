@@ -1,0 +1,25 @@
+README for displacemolecules
+
+written by: Gøran Brekke Svaland 
+date: 2016-06-22
+
+--------------------------------------------------------
+
+calcite-slab.pdb is a pbd file, readable for VMD.
+It contains a small calcite (CaCO3) slab.
+
+executable bash scripts:
+
+displacemolecules_vmd.sh contains input parameters
+that can be tweaked in order to get the desired outcome
+of displacing two input molecules (pdb files), aligning
+them in the z-direction according to their geometrical
+center.
+
+vmd_dispmolecules.sh is called from dispmolecules_vmd.sh
+
+vmd_dispmolecules.sh creates a temporaty file readable
+to VMD, which is executed. The final configuration is
+written as a pdb file.
+
+--------------------------------------------------------

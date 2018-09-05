@@ -1,0 +1,20 @@
+# process_lammpslog
+
+trim LAMMPS log file and produce gnuplot input script or plot directly to eps with gnuplot
+
+Basic useage:
+
+```
+>>> bash process_log.sh log.lammps eps
+>>> bash process_log.sh log.lammps x11
+```
+
+files:
+* kk.awk          : independent bash script performing rolling averages of columns of the input file
+* striplog.sh     : independent bash script stripping away all lines until "Step" and from "Loop time"
+* process_log.sh  : bash script using kk.awk and striplog.sh to create gnuplot files and alternatively plot them
+There is an example file that can be used to test the code:
+
+```
+>>> bash process_log.sh example.log eps
+```
