@@ -112,7 +112,7 @@ for n in range(Ni):
     
     Timestep = int(header3[0]) # Time step
     Nchunks = int(header3[1])  # Number of chunks
-    Ncount = int(header3[2])   # Total count
+    Ncount = float(header3[2])   # Total count
     Ncols = len(header2)       # Number of columns in dataset
     
     nchunks.append(Nchunks)
@@ -192,7 +192,7 @@ header += 'Ftot({:s}) \n'.format(xes[0])
 entries = '# -- Entries:\n# Timestep Number-of-chunks Total-count\n'
 ofile.write(entries)
 ofile.write(header)
-timestep_nchunks_totcount = '{:d} {:d} {:d}\n'.format(Timestep,Nchunks,TotNcount)
+timestep_nchunks_totcount = '# {:d} {:d} {:f}\n'.format(Timestep,Nchunks,TotNcount)
 ofile.write(timestep_nchunks_totcount)
 
 for i in range(Nchunks):
