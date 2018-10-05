@@ -1,0 +1,92 @@
+########################################################################################
+# file "dolomite.lt"
+########################################################################################
+#
+#
+########################################################################################
+
+MgCaCO3 {
+	write_once("In Init") {
+		units real
+		atom_style full
+		pair_style buck/coul/long 12.5
+		kspace_style pppm 0.0001
+		pair_modify tail yes	
+	}
+
+	## Atom properties and molecular topology
+	# "atom_style full" means we use this column format:
+	#           atomID molID atomType charge coordX coordY coordZ
+	write("Data Atoms") {
+		$atom:Ca1 $mol:1 @atom:Ca	2.00000         0.00000        0.00000        0.00000    # Ca 1
+                $atom:Mg1 $mol:2 @atom:Mg       2.00000        -0.00000        2.77994        2.68650    # Mg 1
+                $atom:Ca2 $mol:3 @atom:Ca       2.00000         2.40750        1.38997        5.37300    # Ca 2
+		$atom:Mg2 $mol:4 @atom:Mg	2.00000        -0.00000       -0.00000        8.05950    # Mg 2
+		$atom:Ca3 $mol:5 @atom:Ca	2.00000        -0.00000        2.77994       10.74600    # Ca 3
+		$atom:Mg3 $mol:6 @atom:Mg	2.00000         2.40750        1.38997       13.43250    # Mg 3
+                $atom:C1 $mol:7 @atom:C 	1.123282        2.40750        1.38997        1.44802    # C  1
+                $atom:C2 $mol:8 @atom:C 	1.123282       -0.00000       -0.00000        3.92498    # C  2
+                $atom:C3 $mol:9 @atom:C 	1.123282       -0.00000        2.77994        6.82102    # C  3
+                $atom:C4 $mol:10 @atom:C        1.123282        2.40750        1.38997        9.29798    # C  4
+		$atom:C5 $mol:11 @atom:C	1.123282       -0.00000       -0.00000       12.19402    # C  5
+		$atom:C6 $mol:12 @atom:C	1.123282       -0.00000        2.77994       14.67098    # C  6
+		$atom:O1 $mol:7 @atom:O		-1.041094       1.18088        1.53467        1.43996
+		$atom:O2 $mol:7 @atom:O		-1.041094    	2.89550        0.25534        1.43996
+		$atom:O3 $mol:7 @atom:O		-1.041094   	3.14612        2.37991        1.43996
+		$atom:O4 $mol:8 @atom:O 	-1.041094      -0.73049       -0.91123        3.93304
+		$atom:O5 $mol:8 @atom:O    	-1.041094  	-0.48800       1.13463        3.93304
+		$atom:O6 $mol:8 @atom:O    	-1.041094      1.26852        -0.11626        3.93304
+		$atom:O7 $mol:9 @atom:O    	-1.041094     -1.22662         2.92464        6.81296
+		$atom:O8 $mol:9 @atom:O    	-1.041094      0.48800         1.64531        6.81296
+		$atom:O9 $mol:9 @atom:O     	-1.041094      0.73862         3.76988        6.81296
+		$atom:O10 $mol:10 @atom:O   	-1.041094      3.63412         1.24527        9.30604
+		$atom:O11 $mol:10 @atom:O  	 -1.041094     1.91950         2.52460        9.30604
+		$atom:O12 $mol:10 @atom:O   	-1.041094      1.66888         0.40003        9.30604
+		$atom:O13 $mol:11 @atom:O  	-1.041094     -1.22349         0.18171       12.18596
+		$atom:O14 $mol:11 @atom:O  	-1.041094      0.42694        -1.15844       12.18596
+		$atom:O15 $mol:11 @atom:O   	-1.041094      0.73862         0.98994       12.18596
+		$atom:O16 $mol:12 @atom:O  	-1.041094      1.22662         2.63524       14.67904
+		$atom:O17 $mol:12 @atom:O  	-1.041094     -0.48800         3.91457       14.67904
+		$atom:O18 $mol:12 @atom:O  	-1.041094     -0.73862         1.79000       14.67904
+	}
+	# molID number is unique for each molecule
+	write_once("Data Masses") {
+		# atomType mass
+		@atom:Ca 40.078  # Ca
+		@atom:Mg 24.305  # Mg
+		@atom:C 12.0107  # C
+		@atom:O 15.9994  # O
+	}
+
+	# --- Force-field parameters:
+	write_once("In Settings") {
+		# Ratieri et al. Derivation of an accurate force-field for simulation the 
+		# growth of calcium carbonate from aqueous solution: A new model for the 
+                # calcite-water interface
+
+		# 1) all atoms: rigid ions
+		# 2) no bond or angle terms :)
+
+		# -- Non-bonded (Pair) interactions --
+		# Buckingham: pair_coeff atom1 atom2 A[Kcal/mol] rho[1/A^6] C[KcalA^6/mol]
+
+                pair_coeff @atom:Ca @atom:Ca  0.0 1 0.0                   	 # Ca-Ca
+		pair_coeff @atom:C @atom:C    0.0 1 0.0                  	 # C-C
+		pair_coeff @atom:O @atom:O    1472189.587 0.198913 643.3662442   # O-O
+		pair_coeff @atom:Ca @atom:O   72908.98194 0.271511 0.0           # Ca-O
+		pair_coeff @atom:Ca @atom:C   2767265033 0.12 0.0                # Ca-C
+		pair_coeff @atom:C @atom:O    0.0 1 0.0                  	 # C-O
+		pair_coeff @atom:Ca @atom:Mg  0.0 1 0.0			         # Ca-Mg
+		pair_coeff @atom:C @atom:Mg   1949939915.71 0.112832 0.0	 # C-Mg
+		pair_coeff @atom:O @atom:Mg   51374.96024 0.255294 0.0		 # O-Mg
+		pair_coeff @atom:Mg @atom:Mg  0.0 1 0.0			         # Mg-Mg
+
+		# -- Groups:
+		group MgCaCO3 type @atom:Ca @atom:C @atom:O @atom:Mg
+		group CO3 type @atom:C @atom:O
+		group Ca type @atom:Ca
+                group Mg type @atom:Mg
+		group C type @atom:C
+	}
+
+} # End MgCaCO3

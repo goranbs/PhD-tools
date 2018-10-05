@@ -1,0 +1,89 @@
+#############################################################################################
+#
+# filename: "in.run"
+#
+# system of LJ particles
+#############################################################################################
+
+# ---------------   System information   -------------------- #
+units            lj
+atom_style       atomic
+boundary         p p p
+neighbor         2.0 nsq
+
+## ------------------------------------------------------- ##
+
+variable name string vpres
+
+# --------------- Create system ----------------------------- #
+
+region           SimBox block 0 40 0 20 0 50 side in
+create_box       2 SimBox
+
+lattice          fcc 0.956 origin 0 0 0
+
+create_atoms     1 region SimBox units box
+group            liquid type 1
+
+region           upperslab block 10 30 EDGE EDGE 30 40 units box side in
+lattice          fcc 1.04 origin 0 0 0
+create_atoms     2 region upperslab units box
+
+region           lowerslab block 10 30 EDGE EDGE 10 20 units box side in
+lattice          fcc 1.04 origin 0 0 0
+variable Np equal 30
+
+group            solid type 2
+
+# ---------------   Termodynamic information ----------------- #
+
+variable dt equal 0.0005
+variable tc equal 100*${dt}
+variable tp equal 1000*${dt}
+variable T equal 1
+variable Ns equal 500000
+variable Np equal ${Ns}/100
+variable P equal 1
+variable tp equal 1000*${dt}
+
+# ---------------   Interaction parameters   ----------------- #
+
+variable cutoff equal 2.5
+pair_style lj/cut ${cutoff}
+pair_coeff 1 1 1.5 1 ${cutoff}    # liquid
+pair_coeff 2 2 10 1 ${cutoff}     # solid
+pair_coeff 1 2 2 1 ${cutoff}      # solid-liquid
+
+mass 1 1                          # mass liquid
+mass 2 10                         # mass solid
+
+# ------------------------------------------------------------ #
+
+delete_atoms     overlap 1.2 liquid solid
+change_box       all z final 0 100
+displace_atoms   all move 0 0 50 units box
+
+# ---------------   Termodynamics and simulation output ------ #
+
+dump  Dump all custom ${Np} ${name}.lammpstrj id type x y z fx fy fz vx vy vz
+
+
+timestep         ${dt}    # default lj units
+thermo           ${Np}
+thermo_style     custom step temp press pxx pyy pzz pe ke density
+
+
+velocity         all create ${T} 10753 dist gaussian
+
+fix              NVT liquid nvt temp ${T} ${T} ${dt}
+#fix              NPT all npt temp ${T} ${T} ${dt} iso ${P} ${P} ${tp}
+fix              1 all recenter 0.5 0.5 0.5 units fraction
+
+run              ${Ns}
+
+# ---------------  Write data file ---------------------------- #
+
+write_data       ${name}.data
+
+# ------------------------------------------------------------- # EOF
+

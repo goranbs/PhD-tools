@@ -1,0 +1,85 @@
+#################################################################################################
+# Force field parameters LAMMPS format.
+#################################################################################################
+# aquous CaCO3 parameters:
+# Ratieri et.al. Derivation of an accurate force-field for simulation the
+# growth of calcium carbonate from aqueous solution: A new model for the
+# calcite-water interface. JournPhysChem C 2010.
+# 1) all atoms: rigid ions
+# 2) no bond or angle terms
+# -----------------------------------------------------------------------------------------------
+# SPC/E water model
+#################################################################################################
+	## -- 6 atoms types ---------------------------------------------------------------------
+	variable Ca equal 2                  # calcium
+	variable C equal 1                   # carbonate carbon
+	variable O equal 5                   # carbonate oxygen
+	variable Hw1 equal 3                 # water hydrogen nr 1
+	variable Hw2 equal 4                 # water hydrogen nr 2
+	variable Ow equal 6                  # water oxygen
+
+        ## -- Groups -----------------------------------------------------------------------------
+        group CaCO3 type ${Ca} ${C} ${O}	# CaCO3
+        group CO3 type ${C} ${O}		# CO3
+        group Ca type ${Ca} 			# Ca
+        group C type ${C}  			# C
+
+        group spce type ${Ow} ${Hw1} ${Hw2}  	# all spce water atoms
+        group wh type ${Hw1} ${Hw2}          	# water hydrogen
+        group wo type ${Ow}                  	# water oxygen
+
+	# -- Masses ------------------------------------------------------------------------------
+	mass ${Ca} 40.078                    	# Ca
+	mass ${C} 12.0107                    	# C
+	mass ${O} 15.9994                    	# O
+	mass ${Hw1} 1.008                    	# Hw1
+	mass ${Hw2} 1.008                    	# Hw2
+	mass ${Ow} 15.9994                   	# Ow
+
+	## -- Charges ----------------------------------------------------------------------------
+	set type ${Ca} charge 2.0            	# Ca
+	set type ${C} charge 1.123282        	# C
+	set type ${O} charge -1.041094       	# O
+	set type ${Hw1} charge 0.4238        	# Hw1  (SPCE)
+	set type ${Hw2} charge 0.4238        	# Hw2  (SPCE)
+	set type ${Ow} charge -0.8476        	# Ow   (SPCE)
+
+	##########################################################################################
+	## -- Force field ------------------------------------------------------------------------
+
+	variable cutoff equal 12             # cutoff distance [Angstrom] particle interactions
+	
+	pair_style hybrid/overlay coul/long ${cutoff} buck ${cutoff} lj/cut ${cutoff}
+	#pair_modify tail yes
+
+	pair_coeff * * coul/long             # use long range Coulomb
+	pair_coeff * * lj/cut 0.0 2.198      # set all particle interactions to zero
+
+	## -- Non-bonded interactions ------------------------------------------------------------
+	#- CaCO3
+        pair_coeff ${O} ${O} buck 1472189.58683767 0.198913 643.3662442171   # O-O
+        pair_coeff ${Ca} ${O} buck 72908.9819425083 0.271511 0.0             # Ca-O
+        pair_coeff ${C} ${Ca} buck 2767265033.43952 0.12 0.0                 # Ca-C
+
+	#- H2O
+        pair_coeff ${Ow} ${Ow} lj/cut 0.1623248 3.16435                      # LJ Ow-Ow (SPCE)
+
+	#- CaCO3 <-> H2O 
+        pair_coeff ${Hw1} ${O} buck 9139.3760527116 0.230006 0.0             # Buck O-Hw1
+        pair_coeff ${Hw2} ${O} buck 9139.3760527116 0.230006 0.0             # Buck O-Hw2
+        pair_coeff ${O} ${Ow} buck 289051.328356395 0.215172 278.807140741   # Buck O-Ow
+        pair_coeff ${Ca} ${Ow} lj/cut  0.0230605 3.25                        # LJ (set 2)
+
+        ## -- Bonded interactions ----------------------------------------------------------------
+	#- harmonic bond and angle terms
+
+	bond_style harmonic
+	bond_coeff 1 554.1349 1.0
+
+	angle_style harmonic
+	angle_coeff 1 45.7696 109.47
+	##########################################################################################
+	## Fix shake during simulation -- 2fsec time step may be used ----------------------------
+	fix SHAKE spce shake 0.0001 1000 0 b 1 a 1
+        # (lammps quirk: Remember to "unfix fSHAKE" during minimization.)
+	##########################################################################################

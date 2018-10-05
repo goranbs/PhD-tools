@@ -1,0 +1,8 @@
+Lennard-Jones	epsilon(kcal/mol)	sigma(A)
+
+Ca-Ow	0.0230605419	3.25
+Na-Na	0.1300000000	2.35
+Cl-Cl	0.1000000000	4.4
+Ow-Ow	0.1554253	3.165492
+Hw-Hw	0.0000000	1.51473
+

@@ -1,0 +1,72 @@
+#############################################################################################
+#
+# filename: "in.npt-boxrelax"
+#
+#############################################################################################
+
+# ---------------   System information   --------------------
+units		real
+atom_style	full
+boundary 	p p p
+neighbor 	0.3 bin
+neigh_modify	every 1 delay 1 check yes one 3000
+kspace_style	pppm 1.0e-4
+pair_style 	buck/coul/long 12.5
+pair_modify 	tail yes
+
+
+variable name string npt-2-deg30-c0-ci0.4-r17.72
+#variable name string npt-2-deg45-c0-ci-0.4-r17.72
+#variable name string npt-2-deg90-c0-ci0.4-r17.72
+#variable name string npt-2-deg60-c0-ci0.4-r17.72
+
+box tilt large
+
+read_data npt-deg30-c0-ci0.4-r17.72.data
+#read_data npt-deg45-c0-ci0.4-r17.72.data
+#read_data npt-deg90-c0-ci0.4-r17.72.data
+#read_data npt-deg60-c0-ci0.4-r17.72.data
+
+include CaMgCO3_buck.in.settings
+
+log 	log.lammps-${name}
+# -------------------------------------------------------------------------------------------
+
+# -- set execution variables:
+variable Ne equal 100    		# Dump log info every
+variable Np equal 100      		# Dump trajectory every
+variable Ns equal 5000			# number of time steps
+
+variable Nr equal ${Ns}/${Ne}		# Number of values in average
+
+variable T equal 300       		# Temperature [K]
+variable P equal 0.0      		# pressure [atm]
+variable dt equal 1.0     		# time step [fsec]
+variable tc equal 100*${dt} 		# Temprature damping factor
+variable tp equal ${tc}*5		# pressure damping factor
+
+# -------------------------------------------------------------------------------------------
+
+timestep         ${dt}
+thermo           ${Ne}
+thermo_style     custom step temp press density vol pxx pyy pzz pe ke
+
+#dump  		Dump all custom ${Np} ${name}.lammpstrj id mol type q x y z fx fy fx
+
+#========================================================================
+#	NPT equilibration
+#========================================================================
+
+
+fix		NVT CO3 rigid/nvt/small molecule temp ${T} ${T} ${tc}
+fix		NPT metals npt temp ${T} ${T} ${tc} tri ${P} ${P} ${tp}
+
+fix             MOMENTUM all momentum 10 linear 1 1 1 rescale
+
+run		${Ns}
+
+# -----------------------------------------------------------------------------------------
+
+write_data	${name}.data
+
+# ----------------------- EOF -------------------------------------------------------------

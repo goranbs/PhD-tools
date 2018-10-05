@@ -1,0 +1,192 @@
+#############################################################################################
+#
+# filename: "in.run"
+#
+#############################################################################################
+
+# ---------------   System information   --------------------
+units            real
+atom_style       full
+boundary         p p f
+neighbor         2.0 bin
+neigh_modify     every 1 delay 1 check yes one 3000
+kspace_style     pppm 1.0e-4
+kspace_modify	 slab 3.0
+bond_style       harmonic
+angle_style      harmonic
+
+# -- simulation name:
+variable name string res1-c-1
+
+# -- read initial topology:
+read_restart c-1.restart
+reset_timestep 0
+# -- force field:
+include		forcefield.settings
+
+# -- balance computational regions according to # molecules:
+balance 	1.0 shift z 10 1.0
+
+# -- set execution variables:
+variable Ne equal 100			# Dump log info every
+variable Np equal 10000			# Dump trajectory every
+variable Ns equal 2000000		# time steps in simulation
+variable T equal 300 			# Temperature [K]
+variable dt equal 2.0			# time step [fsec]
+variable tc equal 100*${dt}		# Temprature damping factor
+
+variable Nr equal ${Ns}/${Ne}           # Number of values in averages
+
+# ------- Define regions, groups and calculations -------------------------------------------
+
+# -- define upper and lower slab
+region		lower block EDGE EDGE EDGE EDGE EDGE 110 side in    	# lower region
+region      	upper block EDGE EDGE EDGE EDGE 110 EDGE side in	# upper region
+group  		Lower region lower                   			# all particles lower
+group   	Upper region upper             				# all particles upper
+group    	caco3_L intersect Lower CaCO3    			# lower slab
+group    	caco3_U intersect Upper CaCO3  				# upper slab
+group		CaCO3L subtract caco3_L CaIon CO3Ion
+group		CaCO3U subtract caco3_U CaIon CO3Ion
+
+# -- compute COM of slabs
+compute  	Lcom CaCO3L com      					# center of mass lower
+compute  	Ucom CaCO3U com  					# center of mass upper
+compute		cCa CaIon com						# center of mass Ca ion
+compute		cCO3 CO3Ion com						# com of CO3 ion
+#-- freeze four Ca ions in slabs
+group    	sub id 1561 1111 4566 4116 				# four Ca atoms
+fix     	freeeze_Ca sub move linear 0.0 0.0 0.0 			# constrain sub group
+group		otherCa subtract Ca sub 				# all other Ca, not in sub
+
+# -- define confined region and confined water
+variable	Xlo equal 19
+variable	Xhi equal 61
+region middle block ${Xlo} ${Xhi} EDGE EDGE 101.0 120 side in
+group  		conf_w dynamic wo region middle every ${Ne}		# confined water oxygen
+variable 	Nconf equal count(conf_w) 				# N(H2O) in conf reg
+
+#-- compute solvation forces:
+compute		Flu CaCO3U group/group CaCO3L pair yes kspace yes 	# tot Forces L on U
+compute		Ful CaCO3L group/group CaCO3U pair yes kspace yes 	# tot Forces U on L
+compute		Fwu CaCO3U group/group spce pair yes kspace yes   	# tot F H2O on U
+compute		Fwl CaCO3L group/group spce pair yes kspace yes   	# tot F H2O on L
+compute		Fiu CaCO3U group/group Ions pair yes kspace yes	 	# tot F ions on U
+compute         Fil CaCO3L group/group Ions pair yes kspace yes       	# tot F ions on L
+compute		PotEng all pe # need to compute pot eng for fix ave/time
+
+# -- slab-slab force
+variable	fe equal (c_Flu+c_Ful)/2.
+variable	fx equal (c_Flu[1]-c_Ful[1])/2.
+variable	fy equal (c_Flu[2]-c_Ful[2])/2.
+variable	fz equal (c_Flu[3]-c_Ful[3])/2.
+
+# -- hydration (solvation) force
+variable	fse equal (c_Fwl+c_Fwu)/2.
+variable	fsx equal (c_Fwu[1]-c_Fwl[1])/2.
+variable	fsy equal (c_Fwu[2]-c_Fwl[2])/2.
+variable	fsz equal (c_Fwu[3]-c_Fwl[3])/2.
+
+# -- solvation force (from confined ion)
+variable        fie equal (c_Fil+c_Fiu)/2.
+variable        fix equal (c_Fiu[1]-c_Fil[1])/2.
+variable        fiy equal (c_Fiu[2]-c_Fil[2])/2.
+variable        fiz equal (c_Fiu[3]-c_Fil[3])/2.
+
+#-- Vertical density profile
+variable resolution equal 0.1  # resolution of chunks [Angstrom]
+region CenterReg block ${Xlo} ${Xhi} EDGE EDGE EDGE EDGE side in
+# V1 = 80*39.853*180, V2 = 42*39.853*180, V1/V2 = 1.90476  # Volume relations calcite system
+
+compute Dwater spce chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dcalcite CaCO3 chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dwo wo chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dwh wh chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dco3 CO3 chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dca Ca chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+
+fix DproW spce ave/chunk ${Ne} ${Nr} ${Ns} Dwater density/mass density/number norm all file spce-${name}.profile
+fix DproC CaCO3 ave/chunk ${Ne} ${Nr} ${Ns} Dcalcite density/mass density/number norm all file caco3-${name}.profile
+fix DproWO wo ave/chunk ${Ne} ${Nr} ${Ns} Dwo density/mass density/number norm all file ow-${name}.profile
+fix DproWH wh ave/chunk ${Ne} ${Nr} ${Ns} Dwh density/mass density/number norm all file hw-${name}.profile
+fix DproCO3 CO3 ave/chunk ${Ne} ${Nr} ${Ns} Dco3 density/mass density/number norm all file co3-${name}.profile
+fix DproCa Ca ave/chunk ${Ne} ${Nr} ${Ns} Dca density/mass density/number norm all file ca-${name}.profile
+
+##--  2D horizontal density profiles in the xy-plane
+region one block ${Xlo} ${Xhi} EDGE EDGE 111 115 side in 	# Ca upper (1)
+region two block ${Xlo} ${Xhi} EDGE EDGE 110.5 111.5 side in 	# S1 (2)
+region tre block ${Xlo} ${Xhi} EDGE EDGE 109.5 110.5 side in	# S2 (3)
+region fur block ${Xlo} ${Xhi} EDGE EDGE 107.5 108.5 side in	# S3 (4)
+region fiv block ${Xlo} ${Xhi} EDGE EDGE 105 106 side in	# S4 (5)
+
+compute spceQ spce property/atom q
+
+compute CaU Ca chunk/atom bin/2d x lower ${resolution} y lower ${resolution} units box region one
+fix     CaU Ca ave/chunk ${Ne} ${Nr} ${Ns} CaU density/mass density/number norm all file Ca-2D-${name}.profile
+
+compute S1 spce chunk/atom bin/2d x lower ${resolution} y lower ${resolution} units box region two
+fix     S1 spce ave/chunk ${Ne} ${Nr} ${Ns} S1 density/mass density/number c_spceQ norm all file S1-2D-${name}.profile
+
+compute S2 spce chunk/atom bin/2d x lower ${resolution} y lower ${resolution} units box region tre
+fix     S2 spce ave/chunk ${Ne} ${Nr} ${Ns} S2 density/mass density/number c_spceQ norm all file S2-2D-${name}.profile
+
+compute S3 spce chunk/atom bin/2d x lower ${resolution} y lower ${resolution} units box region fur
+fix     S3 spce ave/chunk ${Ne} ${Nr} ${Ns} S3 density/mass density/number c_spceQ norm all file S3-2D-${name}.profile
+
+compute S4 spce chunk/atom bin/2d x lower ${resolution} y lower ${resolution} units box region fiv
+fix     S4 spce ave/chunk ${Ne} ${Nr} ${Ns} S4 density/mass density/number c_spceQ norm all file S4-2D-${name}.profile
+
+# -- compute msd
+compute 	MCa CaIon msd
+compute		MCO3 CO3Ion msd
+
+variable	factor equal (dt*step+1e-10)
+variable	Dt_CaIon equal c_MCa[4]/v_factor/6
+variable	Dt_CO3Ion equal c_MCO3[4]/v_factor/6
+variable        Dxy_CaIon equal (c_MCa[1]+c_MCa[2])/v_factor/4
+variable        Dxy_CO3Ion equal (c_MCO3[1]+c_MCO3[2])/v_factor/4
+variable        Dz_CaIon equal c_MCa[3]/v_factor/2
+variable        Dz_CO3Ion equal c_MCO3[3]/v_factor/2
+
+# ------- Thermodynamic output --------------------------------------------------------------
+
+timestep	${dt}
+thermo		${Ne}
+thermo_style    custom step temp v_Nconf pe &
+                        c_Lcom[3] c_Ucom[3] &
+                        v_fe v_fz v_fse v_fsz v_fie v_fiz &
+                        v_Dt_CaIon v_Dt_CO3Ion &
+                        v_Dxy_CaIon v_Dxy_CO3Ion &
+			v_Dz_CaIon v_Dz_CO3Ion &
+                        c_cCa[1] c_cCa[2] c_cCa[3] &
+                        c_cCO3[1] c_cCO3[2] c_cCO3[3]
+
+
+#dump            Dump all custom ${Np} ${name}.lammpstrj &
+#	                id mol type q x y z fx fy fz
+
+# ------- Thermostatting --------------------------------------------------------------------
+
+# -- lj-walls for water in z:
+fix		zwalls spce wall/lj93 zlo EDGE 0.1623248 3.16435 10 zhi EDGE 0.1623248 3.16435 10
+
+# -- keep confined ion inside nanoconfinement
+fix		harmonic Ions spring/self 0.1 x
+
+# -- thermostats:
+#fix		NVT otherCa nvt temp ${T} ${T} ${tc}
+fix		NVTi1 CaIon nvt temp ${T} ${T} ${tc}
+fix 		NVTw spce nvt temp ${T} ${T} ${tc}
+fix		NVTi2 CO3Ion rigid/nvt/small molecule temp ${T} ${T} ${tc}
+#fix 		NVTr CO3 rigid/nvt/small molecule temp ${T} ${T} ${tc}
+
+#run		${Nr}
+log		log.lammps-${name}
+run		$(v_Ns+100)
+
+# -----------------------------------------------------------------------------------------
+
+write_data	${name}.data
+write_restart	${name}.restart
+
+# ----------------------- EOF -------------------------------------------------------------

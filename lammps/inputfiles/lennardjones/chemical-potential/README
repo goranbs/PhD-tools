@@ -1,0 +1,8 @@
+# Compute the chemical potential of a LJ-particle at 
+# T=1.3265
+# rho = [0.25:0.35]
+# epsilon=sigma=mass=1.0
+#
+# In order to compare with the results obtained by:
+# D.M.Heyes "The Lennard-Jones fluid in the Liquid-Vapour critical region" (2015), Computational Methods in Science and Technology, 21 (4) 169-179
+#

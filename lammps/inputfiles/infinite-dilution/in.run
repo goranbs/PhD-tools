@@ -1,0 +1,86 @@
+##################################################################################################
+#
+# Compute diffusion coefficient of Ca(2+) or CO3(2-) ion in water at "infinite dilution"
+#
+# ----------------------------------- ------------------------------------------------------------
+
+dimension      	3
+units          	real
+atom_style     	full
+boundary       	p p p
+neighbor       	2.0 bin
+kspace_style   	pppm 1.0e-4
+neigh_modify   	every 1 delay 0 check yes one 3000
+
+##################################################################################################
+
+## ---------------------------------- ###
+variable name string idb-1	# simulation name
+variable Ns_eq equal 20000
+variable Ns_prod equal 4000000
+variable T equal 300
+variable dt equal 2.0
+variable tc equal ${dt}*100
+## -----------------------------------###
+variable S equal 10			# sysem size
+variable S_half equal ${S}/2.0		# half length of system
+variable dz1 equal ${S_half}-3.0	# 
+variable dz2 equal ${S_half}+3.0	#
+variable V equal ${S}*${S}*${S}		# volume
+## ---------------------------------- ###
+
+# -- create water box
+read_data	"water.data" extra/atom/types 4
+replicate	${S} ${S} ${S}
+
+# -- Insert molecules:
+
+molecule	Ca Ca.molecule
+molecule        CO3 CO3.molecule
+
+create_atoms    3 single ${S_half} ${S_half} ${dz2} mol Ca 1349 units box
+
+create_atoms    4 single ${S_half} ${S_half} ${dz1} mol CO3 11111 units box
+
+# -- Force field:
+mass * 1.0
+include		forcefield.settings
+
+## -- Run equilibration --
+
+variable rand equal 9876
+velocity all create ${T} ${rand} dist gaussian
+
+# -- thermostats:
+fix	NVT_Ca Ca nvt temp ${T} ${T} ${tc}
+fix	NPT_w spce npt temp ${T} ${T} ${tc} iso 1.0 1.0 $(v_tc*5)
+fix	NVT_CO3 CO3 rigid/nvt molecule temp ${T} ${T} ${tc}
+
+timestep 	${dt}
+thermo		100
+thermo_style	custom step temp pe density
+log		log.lammps-npt-${name}
+
+run	${Ns_eq}
+
+
+## -- Run production run --
+
+reset_timestep 	0
+thermo		${Ns_eq}
+thermo_style    custom step temp pe density
+log		log.lammps-${name}
+
+compute	pCa Ca property/atom vx vy vz
+compute	vCa Ca reduce sum c_pCa[1] c_pCa[2] c_pCa[3]
+compute	pCO3 CO3 property/atom vx vy vz
+compute	vCO3 CO3 reduce ave c_pCO3[1] c_pCO3[2] c_pCO3[3]
+
+fix	CaAVE Ca ave/time 1 1 1 c_vCa[1] c_vCa[2] c_vCa[3] file velocities-Ca-${name}.dat
+fix	CO3AVE CO3 ave/time 1 1 1 c_vCO3[1] c_vCO3[2] c_vCO3[3] file velocities-CO3-${name}.dat
+
+unfix	NPT_w
+fix     NVT_w spce nvt temp ${T} ${T} ${tc}
+
+run	${Ns_prod}
+

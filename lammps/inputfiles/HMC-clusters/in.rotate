@@ -1,0 +1,136 @@
+#############################################################################################
+#
+# filename: "in.nvt"
+#
+#############################################################################################
+
+# ---------------   System information   --------------------
+units            real
+atom_style       full
+boundary         p p p
+neighbor         0.3 bin
+neigh_modify     every 1 delay 1 check yes one 3000
+kspace_style     pppm 1.0e-4
+pair_style buck/coul/long 12.5
+pair_modify tail yes
+
+
+read_data 15x15x4-dolomite_crystal.data
+
+include CaMgCO3_buck.in.settings
+
+# -------------------------------------------------------------------------------------------
+
+# -- set execution variables:
+variable Ne equal 100		# Dump log info every
+variable Np equal 100		# Dump trajectory every
+variable Ns equal 10000		# number of time steps
+
+variable Nr equal ${Ns}/${Ne}	# Number of values in average
+
+variable T equal 300		# Temperature [K]
+variable dt equal 1.0		# time step [fsec]
+variable tc equal 100*${dt}     # Temprature damping factor
+variable tp equal ${tc}*5       # pressure damping factor
+
+variable x0 equal 19.00   	# x-pos center of sphere
+variable y0 equal 31.25   	# y-pos -//-
+variable z0 equal 32.24 	# z-pos -//-
+#variable r0 equal 16.10
+#variable r0 equal 17.72
+variable r0 equal 19
+
+variable theta equal 0		# angle of rotation
+variable c equal 0
+variable ci equal 0.4
+variable RAND equal 1
+
+variable name string nvt-deg${theta}-c${c}-ci${ci}-r${r0}
+# -------------------------------------------------------------------------------------------
+# -- Create uniform bulk system of (Mg,Ca)CO3 with cluster of high Mg content
+# -------------------------------------------------------------------------------------------
+
+set 		group Mg type 1				# set all Mg to Ca
+group		tmpCa type 1
+set 		group tmpCa type/fraction 2 ${c} $(v_RAND) # set Mg:Ca ratio in bulk
+
+region		SPHERE sphere ${x0} ${y0} ${z0} ${r0}	# define sphere
+group		SPHERE region SPHERE			# all atoms in sphere
+group		SPHERE include molecule
+group		mSPHERE intersect SPHERE metals		# Mg+Ca ions in sphere
+variable	Nsphere equal count(mSPHERE)		# total number of metal ions in sphere
+set 		group mSPHERE type 1			# set all metal ions to be Ca ions
+set 		group mSPHERE type/fraction 2 ${ci} $(v_RAND)	# set Mg:Ca ratio in SPHERE
+
+group		CaNOW type 1					# reset group Ca
+group		MgNOW type 2					# reset group Mg
+group		CaSPHERE intersect SPHERE CaNOW			# Ca in sphere
+group		MgSPHERE intersect SPHERE MgNOW			# Mg in sphere
+
+variable	nCa_sphere equal count(CaSPHERE)		# Ca in sphere
+variable	nMg_sphere equal count(MgSPHERE)		# Mg in sphere
+variable	nCa equal count(CaNOW)				# Ca in system
+variable	nMg equal count(MgNOW)				# Mg in system
+variable	Volume equal vol				# total volume
+variable	Vi equal (4.0/3)*3.14159*$(v_r0*v_r0*v_r0)	# volume of sphere
+variable	phi equal ${Vi}/${Volume}			# volume fraction
+variable	Ci equal ${nMg_sphere}/(${nMg_sphere}+${nCa_sphere})	# Mg:Ca ratio in sphere
+variable	C_system equal ${nMg}/(${nMg}+${nCa})			# Mg:Ca ratio in system
+variable	natoms equal count(all)					# total number of particles
+variable	nCa_bulk equal ${nCa}-${nCa_sphere}
+variable        nMg_bulk equal ${nMg}-${nMg_sphere}
+variable	C_bulk equal ${nMg_bulk}/(${nMg_bulk}+${nCa_bulk})
+
+log		log.lammps-${name}
+print """
+# -- -- -- -- -- SYSTEM INFORMATION -- -- -- -- -- #
+natoms		${natoms}
+nMg_system     	${nMg}
+nCa_system     	${nCa}
+nMg_sphere     	${nMg_sphere}
+nCa_sphere	${nCa_sphere}
+nMg_bulk	${nMg_bulk}
+nCa_bulk	${nCa_bulk}
+volume     	${Volume}
+r0     		${r0}
+Vi     		${Vi}
+Vi/V     	${phi}
+Ci     		${Ci}
+Ci_target	${ci}
+C_bulk		${C_bulk}
+C_bulk_target	${c}
+C_system	${C_system}
+SysInfoLegend	Ci	C_bulk	C_system	phi	r0	theta
+SysInfoData	${Ci}	${C_bulk}	${C_system}	${phi}	${r0}	${theta}
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --  #
+"""
+
+# -------------------------------------------------------------------------------------------
+
+timestep         ${dt}
+thermo           ${Ne}
+thermo_style     custom step temp press density vol pxx pyy pzz pe ke
+
+dump  Dump all custom ${Np} ${name}.lammpstrj id mol type q xu yu zu fx fy fx
+
+velocity        all create ${T} 123546 rot yes dist gaussian
+
+# -- Thermostatting:
+
+fix             MOVE SPHERE move rotate ${x0} ${y0} ${z0} 0 1 0 $(360*v_Ns*v_dt/v_theta)
+
+
+fix		NPTr CO3 rigid/nvt/small molecule temp ${T} ${T} ${tc}
+fix		NPTm metals nvt temp ${T} ${T} ${tc}
+
+#fix		COM all recenter INIT INIT INIT
+
+# -- Run:
+#run		1
+run		${Ns}
+
+# -----------------------------------------------------------------------------------------
+
+write_data	${name}.data
+
+# ----------------------- EOF -------------------------------------------------------------

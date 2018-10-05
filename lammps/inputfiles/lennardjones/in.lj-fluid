@@ -1,0 +1,76 @@
+#############################################################################################
+#
+# filename: "in.run"
+#
+# system of LJ particles
+#############################################################################################
+
+# ---------------   System information   -------------------- #
+units            lj
+atom_style       atomic
+boundary         p p p
+neighbor         2.0 nsq
+
+## ------------------------------------------------------- ##
+
+variable name string g1
+
+# --------------- Create system ----------------------------- #
+
+region           SimBox block 0 40 0 40 0 40 side in
+create_box       1 SimBox
+
+variable	rho equal 0.01	# vapour
+#variable 	rho equal 0.7	# liquid
+#variable	rho equal 1.0	# solid
+
+lattice          fcc ${rho} origin 0 0 0
+
+create_atoms     1 region SimBox units box
+group            liquid type 1
+
+
+# ---------------   Termodynamic information ----------------- #
+
+variable dt equal 0.0005
+variable tc equal 100*${dt}
+variable tp equal 1000*${dt}
+variable T equal 1.0
+variable Ns equal 1000000
+variable P equal 1
+variable tp equal 1000*${dt}
+
+# ---------------   Interaction parameters   ----------------- #
+
+variable cutoff equal 3.0
+pair_style lj/cut ${cutoff}
+pair_coeff 1 1 1 1 ${cutoff}    # liquid
+mass 1 1                    	# mass liquid
+pair_modify tail yes
+
+# ------------------------------------------------------------ #
+
+# ---------------   Termodynamics and simulation output ------ #
+
+
+timestep         ${dt}    # default lj units
+thermo           1000
+thermo_style     custom step temp press pe ke density
+
+velocity         all create ${T} 10753 dist gaussian
+
+fix              NVT liquid nvt temp ${T} ${T} ${dt}
+#fix              NPT all npt temp ${T} ${T} ${dt} iso ${P} ${P} ${tp}
+
+run             10000
+
+dump  		Dump all custom 100 ${name}.lammpstrj id type x y z
+
+run		${Ns}
+
+# ---------------  Write data file ---------------------------- #
+
+write_data       ${name}.data
+
+# ------------------------------------------------------------- # EOF
+

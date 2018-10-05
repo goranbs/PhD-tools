@@ -1,0 +1,183 @@
+#############################################################################################
+#
+# filename: "in.run"
+#
+#############################################################################################
+
+# ---------------   System information   --------------------
+units            real
+atom_style       full
+boundary         p p f
+neighbor         2.0 bin
+neigh_modify     every 1 delay 1 check yes one 3000
+kspace_style     pppm 1.0e-4
+kspace_modify	 slab 3.0
+bond_style       harmonic
+angle_style      harmonic
+
+# -- simulation name:
+variable	name string "simulationName"
+variable	loc equal 110.0
+
+# -- read initial topology:
+read_data "c-1.data"
+
+# -- insert molecules:
+group 		All1 type 1 2 3 4 5 6
+
+molecule	Ca Ca.molecule
+molecule	CO3 CO3.molecule
+
+create_atoms    0 single 35 22 ${loc} mol CO3 1218 units box
+
+group           All2 type 1 2 3 4 5 6
+group           CO3Ion subtract All2 All1
+
+create_atoms    0 single 45 20 ${loc} mol Ca 1319 units box
+
+group           All3 type 1 2 3 4 5 6
+group           CaIon subtract All3 All2
+group		Ions union CaIon CO3Ion
+
+# -- force field:
+include		forcefield.settings
+
+# -- balance computational regions according to # molecules:
+balance 	1.0 shift z 10 1.0
+
+# -- set execution variables:
+variable Ne equal 100			# Dump log info every
+variable Np equal 100			# Dump trajectory every
+variable Ns equal 1000			# time steps in simulation
+variable T equal 300 			# Temperature [K]
+variable dt equal 2.0			# time step [fsec]
+variable tc equal 100*${dt}		# Temprature damping factor
+
+variable Nr equal ${Ns}/${Ne}           # Number of values in averages
+
+
+# ------- Define regions, groups and calculations -------------------------------------------
+
+# -- define upper and lower slab
+region		lower block EDGE EDGE EDGE EDGE EDGE 110 side in    	# lower region
+region      	upper block EDGE EDGE EDGE EDGE 110 EDGE side in	# upper region
+group  		Lower region lower                   			# all particles lower
+group   	Upper region upper             				# all particles upper
+group    	caco3_L intersect Lower CaCO3    			# lower slab
+group    	caco3_U intersect Upper CaCO3  				# upper slab
+group		CaCO3L subtract caco3_L CaIon CO3Ion
+group		CaCO3U subtract caco3_U CaIon CO3Ion
+
+# -- compute COM of slabs
+compute  	Lcom CaCO3L com      					# center of mass lower
+compute  	Ucom CaCO3U com  					# center of mass upper
+compute		cCa CaIon com						# center of mass Ca ion
+compute         cCO3 CO3Ion com                      			# center of mass CO3ion
+#-- freeze four Ca ions in slabs
+group    	sub id 1561 1111 4566 4116 				# four Ca atoms
+fix     	freeeze_Ca sub move linear 0.0 0.0 0.0 			# constrain sub group
+group		otherCa subtract Ca sub 				# all other Ca, not in sub
+
+# -- define confined region and confined water
+variable	Xlo equal 19
+variable	Xhi equal 61
+region 		middle block ${Xlo} ${Xhi} EDGE EDGE 102 120 side in	# COM to COM region
+group  		conf_w dynamic wo region middle every ${Ne}		# confined water oxygen
+variable 	Nconf equal count(conf_w) 				# N(H2O) in conf reg
+
+#-- compute solvation forces:
+compute		Flu CaCO3U group/group CaCO3L pair yes kspace yes 	# tot Forces L on U
+compute		Ful CaCO3L group/group CaCO3U pair yes kspace yes 	# tot Forces U on L
+compute		Fwu CaCO3U group/group spce pair yes kspace yes   	# tot F H2O on U
+compute		Fwl CaCO3L group/group spce pair yes kspace yes   	# tot F H2O on L
+compute		Fiu CaCO3U group/group Ions pair yes kspace yes		# tot F ions on U
+compute         Fil CaCO3L group/group Ions pair yes kspace yes       	# tot F ions on L
+compute		PotEng all pe # need to compute pot eng for fix ave/time
+
+# -- slab-slab force
+variable	fe equal (c_Flu+c_Ful)/2.
+variable	fx equal (c_Flu[1]-c_Ful[1])/2.
+variable	fy equal (c_Flu[2]-c_Ful[2])/2.
+variable	fz equal (c_Flu[3]-c_Ful[3])/2.
+
+# -- hydration (solvation) force
+variable	fse equal (c_Fwl+c_Fwu)/2.
+variable	fsx equal (c_Fwu[1]-c_Fwl[1])/2.
+variable	fsy equal (c_Fwu[2]-c_Fwl[2])/2.
+variable	fsz equal (c_Fwu[3]-c_Fwl[3])/2.
+
+# -- solvation force (from confined ion)
+variable        fie equal (c_Fil+c_Fiu)/2.
+variable        fix equal (c_Fiu[1]-c_Fil[1])/2.
+variable        fiy equal (c_Fiu[2]-c_Fil[2])/2.
+variable        fiz equal (c_Fiu[3]-c_Fil[3])/2.
+
+#-- Vertical density profile
+variable resolution equal 0.1  # resolution of chunks [Angstrom]
+region CenterReg block ${Xlo} ${Xhi} EDGE EDGE EDGE EDGE side in
+# V1 = 80*39.853*180, V2 = 42*39.853*180, V1/V2 = 1.90476  # Volume relations calcite system
+
+compute Dwater spce chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dcalcite CaCO3 chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dwo wo chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dwh wh chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dco3 CO3 chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+compute Dca Ca chunk/atom bin/1d z lower ${resolution} units box region CenterReg
+
+fix DproW spce ave/chunk ${Ne} ${Nr} ${Ns} Dwater density/mass density/number norm all file spce-${name}.profile
+fix DproC CaCO3 ave/chunk ${Ne} ${Nr} ${Ns} Dcalcite density/mass density/number norm all file caco3-${name}.profile
+fix DproWO wo ave/chunk ${Ne} ${Nr} ${Ns} Dwo density/mass density/number norm all file ow-${name}.profile
+fix DproWH wh ave/chunk ${Ne} ${Nr} ${Ns} Dwh density/mass density/number norm all file hw-${name}.profile
+fix DproCO3 CO3 ave/chunk ${Ne} ${Nr} ${Ns} Dco3 density/mass density/number norm all file co3-${name}.profile
+fix DproCa Ca ave/chunk ${Ne} ${Nr} ${Ns} Dca density/mass density/number norm all file ca-${name}.profile
+
+fix             Avg all ave/time ${Ne} ${Nr} ${Ns} &
+                        c_PotEng v_Nconf c_Lcom[3] c_Ucom[3] &
+                        v_fe v_fx v_fy v_fz v_fse v_fsx v_fsy v_fsz &
+			v_fie v_fix v_fiy v_fiz &
+                        file avg-${name}.out start ${Nr}
+
+# ------- Thermodynamic output --------------------------------------------------------------
+
+timestep	${dt}
+thermo		${Ne}
+thermo_style    custom step temp v_Nconf pe &
+			c_Lcom[3] c_Ucom[3] &
+                        v_fe v_fz v_fse v_fsz v_fie v_fiz &
+			c_cCa[1] c_cCa[2] c_cCa[3] &
+			c_cCO3[1] c_cCO3[2] c_cCO3[3] 
+
+#dump            Dump all custom ${Np} ${name}.lammpstrj &
+#                id mol type q x y z fx fy fz
+
+# ------- Energy minimization of water ------------------------------------------------------
+
+unfix		SHAKE				# unfix SHAKE during energy minimization
+fix		freeze CaCO3 setforce 0 0 0	# freeze all CaCO3
+minimize 	1.0e-4 1.0e-6 100 1000
+unfix		freeze
+fix 		SHAKE spce shake 0.0001 1000 0 b 1 a 1
+
+
+# ------- Thermostatting --------------------------------------------------------------------
+
+# -- lj-walls for water in z:
+fix		zwalls spce wall/lj93 zlo EDGE 0.1623248 3.16435 10 zhi EDGE 0.1623248 3.16435 10
+
+# -- keep confined ion inside nanoconfinement
+#fix		harmonic Ions spring/self 0.1 x
+
+# -- thermostats:
+#fix		NVT otherCa nvt temp ${T} ${T} ${tc}
+fix 		NVTw spce nvt temp ${T} ${T} ${tc}
+#fix 		NVTr CO3 rigid/nvt molecule temp ${T} ${T} ${tc}
+
+log		log.lammps-${name}
+run		${Ns}
+
+# -----------------------------------------------------------------------------------------
+
+#write_data	${name}.data
+write_restart	${name}.restart
+
+# ----------------------- EOF -------------------------------------------------------------

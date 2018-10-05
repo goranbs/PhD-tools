@@ -1,0 +1,112 @@
+#
+#  Library of potentials for calcium carbonate with flexible carbonate group 
+#
+#  P. Raiteri, R. Demichelis and J.D. Gale, J. Phys. Chem. C, 119, 24447 (2015)
+#
+#  Intermolecular interactions are essentially the same as per the rigid
+#  ion model, except that the taper is modified to suit the SPC/Fw water
+#  model.
+#
+#  This library contains the flexible SPC water model of Wu et al
+#
+#  Y. Wu, H.L. Tepper and G.A. Voth, J. Chem. Phys., 124, 024503 (2006)
+#
+#  Also included are the parameters for hydroxonium from the MSEVB3 model:
+#
+#  Y. Wu et al, J. Phys. Chem. 112, 470 (2008)
+#
+#  O2 - oxygen of water
+#  H2 - hydrogen of water
+#
+#  C4 - carbonate oxygen
+#  O4 - carbonate oxygen
+#
+#  Keywords:
+# 
+keyword mole 
+#
+#  Options:
+#
+species 
+O2     core   -0.82
+H2     core    0.41
+Ca     core    2.000000
+Mg     core    2.000000
+Sr     core    2.000000
+Ba     core    2.000000
+C4     core    1.123285
+O4     core   -1.041095
+#
+#  Intermolecular parameters - carbonate and bicarbonate
+#
+buck
+O4    core Ca    core  3161.6335     0.271511  0.000000  0.00 9.00
+buck
+O4    core Mg    core  3944.8613     0.238160  0.0000000 0.00 9.00
+buck
+O4    core Sr    core 14250.2690     0.244116  0.0000000 0.00 9.00 
+buck
+O4    core Ba    core 13478.1510     0.258299  0.0000000 0.00 9.00
+#
+#  Carbonate intramolecular
+#
+harmonic intra bond
+C4    core O4    core  40.8493      1.3042     0.00000
+bcross bond intra regular
+C4    cor O4    cor O4    cor  12.818      1.3042 1.3042
+three bond intra regular
+C4    core O4    core O4    core 13.234     120.00
+bacross intra regular  bond
+C4    core O4    core O4    core  1.53319 1.53319 1.3042 1.3042 120.0
+outofplane bond intra
+C4    cor O4    cor O4    cor O4    cor 13.647  360.00
+#
+#  Carbonate Intermolecular parameters
+#
+buck inter
+O4    core O4    core  63840.1990     0.198913  27.89901      0.00 9.00
+#
+#  Cation - water interactions - new from paper
+#
+lennard epsilon zero 12 6
+Mg core O2 core 0.001137 2.82 0.0 9.0
+Ca core O2 core 0.000950 3.35 0.0 9.0
+Sr core O2 core 0.000776 3.65 0.0 9.0
+Ba core O2 core 0.000657 3.965 0.0 9.0
+#
+#  Carbonate - water interactions
+#
+buck
+O4 core O2 core 12534.455133 0.2020  0.000000 0.0 9.0
+buck
+O4 core H2 core   340.300000 0.2170  0.000000 0.0 9.0
+#
+#  Intramolecular for water
+#
+harmonic bond 
+O2 core H2 core 45.93 1.012 0.0
+three bond 
+O2 core H2 core H2 core 3.29136 113.24
+#
+#  Water - water intermolecular
+#
+lennard inter epsilon zero 
+O2 core O2 core 0.00674 3.165492 0.0 9.0
+#
+#  Bond exclusions
+#
+nobond O4 H2
+nobond C4 H2
+#
+#  Taper cut-off
+#
+cutp      9.00000 mdf    3.00000
+#
+#  Put radius for cations to 0 so that they don't bond
+#
+element
+covalent Ca    0.00000
+covalent Mg    0.00000
+covalent Sr    0.00000
+covalent Ba    0.00000
+end

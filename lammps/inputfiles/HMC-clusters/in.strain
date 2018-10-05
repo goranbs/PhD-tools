@@ -1,0 +1,97 @@
+#############################################################################################
+#
+# filename: "in.z-strain"
+#
+#############################################################################################
+
+# ---------------   System information   --------------------
+
+units            real
+atom_style       full
+boundary         p p p
+neighbor         0.5 bin
+neigh_modify     every 1 delay 10 check yes one 3000
+kspace_style     pppm 1.0e-4
+pair_style buck/coul/long 12.5
+pair_modify tail yes
+
+variable name string zstrain-deg30-c0-ci0.4-r17.72
+
+box tilt large
+
+read_data npt-deg30-c0-ci0.4-r17.72.data
+
+include CaMgCO3_buck.in.settings
+
+# -------------------------------------------------------------------------------------------
+
+# -- set execution variables:
+variable ns equal 4 			# simulation time [ns]
+variable T equal 300                   	# [Kelvin]
+variable P equal 0.0                   	# [atm]
+variable dt equal 1.0                  	# time steps
+variable tc equal 100*${dt}            	# temprature damping factor
+variable tp equal 500*${dt}            	# pressure damping factor
+variable Ne equal round(5000/${dt})		# Dump log info every
+variable Nf equal round(10000/${dt})		# Dump trajectory every
+variable Ns equal round(1000000*${ns}/${dt})	# Number of time steps
+variable Nr equal ${Ns}/${Ne}			# Number of values in average
+
+#-------------------------------------------------------------------------------------------------
+
+variable L0x equal (xhi-xlo)                  	# initial system size, x-dir
+variable L0y equal (yhi-ylo)                  	# initial system size, y-dir
+variable L0z equal (zhi-zlo)                  	# initial system size, z-dir
+variable vel equal 1.0                        	# [1/s] strain velocity
+variable factor equal (1.0E+5)/${dt}          	# [x Angstrom/fsec = factor * m/s]
+variable Vel equal ${vel}/${factor}           	# strain velocity [Angstrom/fsec]
+variable Sx equal ((xhi-xlo)-${L0x})/${L0x}   	# Strain x dir
+variable Sy equal ((yhi-ylo)-${L0y})/${L0y}   	# Strain y dir
+variable Sz equal ((zhi-zlo)-${L0z})/${L0z}   	# Strain z dir
+variable XY equal xy                          	# tilt factor xy
+variable XZ equal xz                          	# tilt factor xz
+variable YZ equal yz                          	# tilt factor yz
+variable Sxy equal (xy-${XY})/${XY}           	# strain of tilt factor from original pos
+variable Sxz equal (xz-${XZ})                 	# -//-
+variable Syz equal (yz-${YZ})                 	# -//-
+
+# ------------------------------------------------------------------------------------------------
+
+timestep         ${dt}
+
+compute          Temp all temp                         # system temprature
+compute          Tco3 CO3 temp                         # compute temp of CO3
+compute          Tca Ca temp                           # compute temp of Ca
+compute          P all pressure Temp                   # pressure -tensor 
+
+thermo_style     custom step pe density &
+			c_P c_P[1] c_P[2] c_P[3] c_P[4] c_P[5] c_P[6] &
+			v_Sx v_Sy v_Sz v_Sxy v_Sxz v_Syz
+
+thermo           ${Ne}
+dump             Dump all custom ${Nf} ${name}.lammpstrj &
+				id type q x y z
+
+# -------------- Simulation ----------------------------------------------------------------------
+
+fix              NpT metals npt temp ${T} ${T} ${tc} &
+                               y ${P} ${P} ${tp} &
+                               xy ${P} ${P} ${tp} &
+                               xz ${P} ${P} ${tp} &
+                               yz ${P} ${P} ${tp} &
+              		       x ${P} ${P} ${tp}
+
+fix              NVTr CO3 rigid/nvt/small molecule temp ${T} ${T} ${tc}
+			
+run		 1000
+
+fix              1 all deform 1 z vel ${Vel} remap x
+fix		 2 all momentum 10 linear 1 1 1 rescale
+
+log		 log.lammps-${name}
+run              ${Ns}
+ 
+
+write_data       ${name}.data
+write_restart	 ${name}.restart
+# ----------------------- End --------------------------------------------------------------------

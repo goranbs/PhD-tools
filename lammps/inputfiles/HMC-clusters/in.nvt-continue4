@@ -1,0 +1,96 @@
+#############################################################################################
+#
+# filename: "in.nvt-continue2"
+#
+#############################################################################################
+
+# ---------------   System information   --------------------
+units            real
+atom_style       full
+boundary         p p p
+neighbor         0.3 bin
+neigh_modify     every 1 delay 1 check yes one 3000
+kspace_style     pppm 1.0e-4
+pair_style buck/coul/long 12.5
+pair_modify tail yes
+
+
+#variable name string dolomite-1
+#variable name string calcite-1
+variable name string magnesite-1
+
+box tilt large
+
+#read_data dol-npt2-deg0-c0-ci0-r19.data	# dolomite
+#read_data npt2-deg0-c0-ci0-r18.data	# calcite
+read_data npt2-deg0-c0-ci0-r19.data	# magnesite
+
+include CaMgCO3_buck.in.settings
+
+log 	log.lammps-${name}
+# -------------------------------------------------------------------------------------------
+
+# -- set execution variables:
+variable Ne equal 100                     # Dump log info every
+variable Np equal 100                     # Dump trajectory every
+variable Ns equal 10000		  # number of time steps
+
+variable Nr equal ${Ns}/${Ne}             # Number of values in average
+
+variable T equal 300                     # Temperature [K]
+variable P equal 0.0                      # pressure [atm]
+variable dt equal 2.0                     # time step [fsec]
+variable tc equal 100*${dt}               # Temprature damping factor
+variable tp equal ${tc}*5                 # pressure damping factor
+
+# -------------------------------------------------------------------------------------------
+
+timestep         ${dt}
+thermo           ${Ne}
+thermo_style     custom step temp press density vol pxx pyy pzz pe ke
+
+# -- compute density profile accross the center of the cluster
+
+variable x0 equal 19.00         # x-pos center of sphere
+variable y0 equal 31.25         # y-pos -//-
+variable z0 equal 32.24         # z-pos -//-
+
+variable xr equal ${x0}/lx
+variable yr equal ${y0}/ly
+variable zr equal ${z0}/lz
+
+variable resolution equal 0.001  # resolution of chunks
+variable rmin equal 10.0
+variable rmax equal 40.0
+variable nbins equal floor($((v_rmax-v_rmin)/v_resolution))
+
+variable rminr equal 0.05
+variable rmaxr equal 0.5
+
+compute         dr metals chunk/atom bin/sphere 0.5 0.5 0.5 ${rminr} ${rmaxr} 1000 pbc no units reduced
+fix             dr metals ave/chunk ${Ne} ${Nr} ${Ns} dr density/mass density/number norm all file density-sphere-${name}.profile
+
+variable	rho_Nmgca equal count(metals)/vol
+
+dump		Dump all custom ${Np} ${name}.lammpstrj id mol type q x y z
+
+#========================================================================
+#	NPT equilibration
+#========================================================================
+
+thermo_style     custom step temp press density v_rho_Nmgca pxx pyy pzz pe ke
+
+
+fix		NVTr CO3 rigid/nvt/small molecule temp ${T} ${T} ${tc}
+fix		NVT metals nvt temp ${T} ${T} ${tc}
+
+#fix		MOMENTUM all momentum 10 linear 1 1 1 rescale
+
+run		${Ns}
+
+
+# -----------------------------------------------------------------------------------------
+
+#write_data	nvt2-${name}.data
+
+# ----------------------- EOF -------------------------------------------------------------

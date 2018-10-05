@@ -1,0 +1,76 @@
+#############################################################################################
+# system of LJ particles
+#############################################################################################
+
+# ---------------   System information   --------------------
+units		lj
+atom_style	atomic
+boundary	p p p
+neighbor	0.3 bin
+neigh_modify	every 1 delay 1 check yes one 3000
+
+variable	cutoff equal 3.5
+pair_style      hybrid lj/cut ${cutoff} lj/cut/soft 1 0.5 ${cutoff}
+
+# -----------------------------------------------------------
+
+variable	name string "10-1"	# simulation name
+variable	T equal 0.75		# temperature
+
+log		log.lammps-${name}
+# -----------------------------------------------------------
+
+read_data	eq_800.data extra/atom/types 1
+
+# -- pair_style: lj/cut
+pair_coeff	1 1 lj/cut 1 1
+pair_coeff      2 2 lj/cut 1 1 0
+
+# -----------------------------------------------------------
+
+variable	dt equal 0.0005
+variable	tc equal 200*${dt}
+variable	tp equal 1000*${dt}
+variable	Ns equal 5000000
+variable	Ne equal 10
+variable	Np equal 5000
+
+variable	N equal ${Ne}*${Np}
+
+timestep	${dt}    # default lj units
+
+# ----------------------------------------------------------
+
+create_atoms	2 single 5 5 5
+mass		* 1
+pair_coeff	1 2 lj/cut/soft 1 1 1
+group		All type 1
+group		One type 2
+
+fix		NVT all nvt temp ${T} ${T} ${tc}
+
+minimize 	1.0e-4 1.0e-6 100 1000
+
+run		${N}
+reset_timestep	0
+
+# ----------------------------------------------------------
+
+variable        delta equal 1.0/(${Ns}/${N})
+variable        lambda equal ramp(1.0,0.0)
+
+fix		ADAPT all adapt/fep ${N} pair lj/cut/soft lambda 1 2 v_lambda &
+			after yes
+
+compute		FEP all fep ${T} pair lj/cut/soft lambda 1 2 v_delta &
+			tail no volume no
+
+fix		FEP all ave/time ${Ne} ${Np} ${N} c_FEP[1] c_FEP[2] file fep${name}.lmp
+
+thermo          ${N}
+thermo_style    custom step temp press ke density c_FEP[1] c_FEP[2] v_lambda f_FEP[1] f_FEP[2]
+thermo_modify   norm no
+
+run		${Ns}
+# ---------------------------------------------------------
+
