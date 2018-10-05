@@ -17,7 +17,7 @@ import scipy.integrate as integrate        # scipy integration methods
 import matplotlib.pyplot as plt            # plotting
 import sys
 
-plot_result=False
+plot_result=True
 
 Pa=101325.0         # conversion factor to [Pa]
 GPa=0.000101325     # conversion factor to [GPa]
@@ -32,6 +32,7 @@ Y = int(sys.argv[4])-1           # python starts counting at zero!
 data = np.loadtxt(filename, comments='#', skiprows=skipNrows)
 
 x = data[:,X]
+x = x[x<0.2]
 y = -data[:,Y]*GPa          # NB! flipping sign, and myltipy by GPa
 IDmax = np.argmax(y)
 
