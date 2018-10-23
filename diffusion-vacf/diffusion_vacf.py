@@ -61,6 +61,8 @@ Timestep = np.zeros(ni)
 
 Itot = np.zeros(ni)     # Time evolution of total diffusion coefficient
 Ixy = np.zeros(ni)      # Time evolution of diffusion coefficient in xy-plane
+Ix = np.zeros(ni)       # Time evolution of diffusion coefficient in x
+Iy = np.zeros(ni)       # Time evolution of diffusion coefficient in y
 Iz = np.zeros(ni)       # Time evolution of diffusion coefficient in z
 
 #plt.figure()
@@ -89,12 +91,18 @@ for i in range(ni):
     if i > 0:
         vi = vacfs[3]/i
         vi_xy = vacfs[4]/i
+        vi_x = vacfs[0]/i
+        vi_y = vacfs[1]/i
         vi_z = vacfs[2]/i
         itoti = integrate.simps(vi,time)/3.0
         itoti_xy = integrate.simps(vi_xy,time)/2.0
+        itoti_x = integrate.simps(vi_x,time)
+        itoti_y = integrate.simps(vi_y,time)
         itoti_z = integrate.simps(vi_z,time)
         Itot[i] = itoti
         Ixy[i] = itoti_xy
+        Ix[i] = itoti_x
+        Iy[i] = itoti_y
         Iz[i] = itoti_z
         Timestep[i] = j
         
@@ -118,8 +126,8 @@ iz = integrate.simps(vacfz,time)
 itot = integrate.simps(vacf,time)/3.0
 itot_xy = integrate.simps(vacf_xy,time)/2.0
 
-header="step Dxyz Dxy Dz # final Dxyz={}, Dxy={}, Dx={}, Dy={}, Dz={}".format(itot,itot_xy,ix,iy,iz)
-X = (Timestep,Itot,Ixy,Iz)
+header="step Dxyz Dxy Dx Dy Dz # final Dxyz={}, Dxy={}, Dx={}, Dy={}, Dz={}".format(itot,itot_xy,ix,iy,iz)
+X = (Timestep, Itot, Ixy, Ix, Iy, Iz)
 np.savetxt("diffusion-{}.out".format(fname), np.transpose(X), header=header)
 
 header="step vacf vacf_x vacf_y vacf_z"
