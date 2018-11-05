@@ -1,0 +1,75 @@
+#############################################################################################
+#
+# filename: "in.run"
+#
+#
+# written by Goran Brekke Svaland
+# g.svaland15@imperial.ac.uk
+#############################################################################################
+
+# ---------------   System information   --------------------
+units		real
+atom_style	full
+boundary	p p f
+neighbor	2.0 bin
+neigh_modify	every 1 delay 1 check yes one 3000
+kspace_style	pppm 1.0e-4
+kspace_modify	slab 3.0
+bond_style	harmonic
+angle_style	harmonic
+
+# -- simulation name:
+variable	name string continue-1
+
+# -- read initial topology of calcite slab:
+read_restart	eq-1.restart
+
+# -- force field:
+include		forcefield.settings
+
+# -- balance computational regions according to # molecules:
+balance 	1.0 shift z 10 1.0
+
+# -- set execution variables:
+variable Ne equal 100			# Dump log info every
+variable Np equal 100			# Dump trajectory every
+variable Ns equal 10000			# time steps in simulation
+variable T equal 300 			# Temperature [K]
+variable dt equal 2.0			# time step production run [fsec]
+variable tc equal 100*${dt}		# Temprature damping factor
+variable tp equal 1000*${dt}            # Pressure damping factor
+variable Nr equal ${Ns}/${Ne}           # Number of values in averages
+
+#-- freeze two Ca ions in slab
+group           sub id 1086 1626                   		# index of Ca atoms to freeze
+fix             freeeze_Ca sub move linear 0.0 0.0 0.0		# remove motion of subgroup
+group           otherCa subtract Ca sub                	# other Ca, not in sub
+
+# ------- Thermodynamic output --------------------------------------------------------------
+
+timestep	${dt}
+thermo		${Ne}
+thermo_style    custom step temp pe
+
+dump            Dump all custom ${Np} ${name}.lammpstrj &
+	                id mol type q x y z
+
+# ------- Thermostatting --------------------------------------------------------------------
+
+# -- make sure water molecules does not go to other side
+fix             zwalls spce wall/lj93 zhi EDGE 0.1623248 3.16435 10
+
+#fix		NVT otherCa nvt temp ${T} ${T} ${tc}
+fix		NPT otherCa npt temp ${T} ${T} ${tc} x 1.0 1.0 ${tp} y 1.0 1.0 ${tp} couple xy
+fix 		NVTw spce nvt temp ${T} ${T} ${tc}
+fix 		NVTr CO3 rigid/nvt molecule temp ${T} ${T} ${tc}
+
+log		log.lammps-${name}
+run		${Ns}
+
+# -----------------------------------------------------------------------------------------
+
+write_data	${name}.data
+write_restart	${name}.restart
+
+# ----------------------- EOF -------------------------------------------------------------

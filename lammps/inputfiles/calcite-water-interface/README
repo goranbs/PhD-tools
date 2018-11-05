@@ -1,0 +1,12 @@
+setup simulation of a calcite-water system with the (10.4) surface of calcite facing the water along the z-axis.
+The systems are periodic in the xy-plane.
+Vacuum is added along the z-direction
+
+1) slab
+	start from a pre-equilibrated slab of calcite
+	adding water molecules on top of the surface
+
+2) N-unitcells
+	start from a unitcell of calcite with the (10.4) surface facing in z-dir.
+	replicate the system (create a slab/supercell)
+	add water molecules on top of the uneqilibrates slab
