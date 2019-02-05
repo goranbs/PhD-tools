@@ -1,0 +1,10 @@
+
+
+disjoininpressure.txt produced using grabit (Matlab script for extracting data from plots)
+
+grace-out-freenergy.dat produced using grace's (plotting tool) cumulative integration method on disjoiningpressure.txt
+
+freenergy.dat produced using gnuplot with inputscript plot-freenergy.gnu
+
+
+The shift for the calcite_inregistry.dat is: 15.3

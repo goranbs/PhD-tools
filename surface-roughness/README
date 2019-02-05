@@ -1,0 +1,16 @@
+### Compute the interaction potential of two spherical colloids for different surface roughesses
+
+We start from the interaction potential of two flat surfaces found from atomistic simulations of two calcite surfaces:
+
+* Brekke-Svaland and Bresme "Interactions Between Hydrated Calcium Carbonate Surfaces at Nanoconfinement Conditions" (2018)
+
+The free energy of separating the two hydrated surfaces is the integral of the disjoining pressure. 
+This free energy per surface area, can be related to the force between two colloidal particles, using the Derjaguin approximation.
+Finally, we find the interaction potential of two spherical particles taking the negative integral of the force.
+
+Surface roughness is added using two different approaches:
+
+	1) Gaussian concolution, assuming a continuous (smooth) distribution of surface steps
+	2) Random sampling of discrete surface heights. Assuming steps of the same size as for the calcite surface.
+
+
