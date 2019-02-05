@@ -43,3 +43,5 @@ written by Goran Brekke Svaland
 	* `fractaldim.py` compute the fractal dimension of a system using the box counting algorithm
 * hist-gauss
 	* compute histogram of columnar dataset and make a fit to a gaussian bell curve
+* surface-roughness
+	* scripts for computing colloidal interaction potential
